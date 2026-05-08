@@ -1,0 +1,445 @@
+--- a/settings.gradle.kts
++++ b/settings.gradle.kts
+@@ -25,7 +25,5 @@
+ 
+ project(":packages:react-native:ReactAndroid").projectDir = file("ReactAndroid/")
+ 
+-include(":packages:react-native:ReactAndroid:hermes-engine")
+-
+-project(":packages:react-native:ReactAndroid:hermes-engine").projectDir =
+-    file("ReactAndroid/hermes-engine/")
++// hermes-engine subproject removed: we consume Hermes V1 as a Maven prebuilt
++// (com.facebook.hermes:hermes-android) instead of building it inline.
+--- a/ReactAndroid/build.gradle.kts
++++ b/ReactAndroid/build.gradle.kts
+@@ -580,8 +580,7 @@
+           preparePrefab)
+   tasks.getByName("generateCodegenSchemaFromJavaScript").dependsOn(buildCodegenCLI)
+   prepareKotlinBuildScriptModel.dependsOn("preBuild")
+-  prepareKotlinBuildScriptModel.dependsOn(
+-      ":packages:react-native:ReactAndroid:hermes-engine:preBuild")
++  // hermes-engine subproject removed; previously: dependsOn(":...:hermes-engine:preBuild")
+ 
+   sourceSets.getByName("main") {
+     res.setSrcDirs(
+@@ -609,6 +608,7 @@
+     // JS engine by specifying a dependency on either `hermes-engine` or `android-jsc`
+     // that will include the necessary .so files to load.
+     jniLibs.excludes.add("**/libhermes.so")
++    jniLibs.excludes.add("**/libhermesvm.so")
+     jniLibs.excludes.add("**/libjsc.so")
+   }
+ 
+@@ -669,7 +669,7 @@
+ 
+   // It's up to the consumer to decide if hermes/jsc should be included or not.
+   // Therefore hermes-engine and jsc are compileOnly dependencies.
+-  compileOnly(project(":packages:react-native:ReactAndroid:hermes-engine"))
++  compileOnly("com.facebook.hermes:hermes-android:250829098.0.13")
+   compileOnly(libs.jsc.android)
+ 
+   testImplementation(libs.junit)
+--- a/ReactAndroid/src/main/jni/CMakeLists.txt
++++ b/ReactAndroid/src/main/jni/CMakeLists.txt
+@@ -367,8 +367,7 @@
+     -Werror
+     -fexceptions
+     -frtti
+-    -std=c++20
+-    -DHERMES_ENABLE_DEBUGGER)
++    -std=c++20)
+ 
+ target_link_libraries(reactnative_unittest
+   fabricjni
+@@ -376,7 +375,7 @@
+   glog
+   glog_init
+   gtest_main
+-  hermes-engine::libhermes
++  hermes-engine::hermesvm
+   hermes_inspector_modern
+   jserrorhandler
+   jsi
+--- a/ReactAndroid/src/main/jni/react/hermes/instrumentation/CMakeLists.txt
++++ b/ReactAndroid/src/main/jni/react/hermes/instrumentation/CMakeLists.txt
+@@ -26,7 +26,7 @@
+ 
+ target_link_libraries(
+       jsijniprofiler
+-      hermes-engine::libhermes
++      hermes-engine::hermesvm
+       jsi
+       reactnative
+ )
+--- a/ReactAndroid/src/main/jni/react/hermes/instrumentation/HermesSamplingProfiler.cpp
++++ b/ReactAndroid/src/main/jni/react/hermes/instrumentation/HermesSamplingProfiler.cpp
+@@ -13,19 +13,16 @@
+ namespace jsi {
+ namespace jni {
+ 
+-void HermesSamplingProfiler::enable(jni::alias_ref<jclass>) {
+-  hermes::HermesRuntime::enableSamplingProfiler();
+-}
++// Hermes V1 moved the static enable/disable/dump entry points off
++// HermesRuntime. Stubbed for now — sampling profiler is unavailable until
++// these are reimplemented against V1's API.
++void HermesSamplingProfiler::enable(jni::alias_ref<jclass>) {}
+ 
+-void HermesSamplingProfiler::disable(jni::alias_ref<jclass>) {
+-  hermes::HermesRuntime::disableSamplingProfiler();
+-}
++void HermesSamplingProfiler::disable(jni::alias_ref<jclass>) {}
+ 
+ void HermesSamplingProfiler::dumpSampledTraceToFile(
+     jni::alias_ref<jclass>,
+-    std::string filename) {
+-  hermes::HermesRuntime::dumpSampledTraceToFile(filename);
+-}
++    std::string /*filename*/) {}
+ 
+ void HermesSamplingProfiler::registerNatives() {
+   javaClassLocal()->registerNatives({
+--- a/ReactAndroid/src/main/jni/react/hermes/reactexecutor/CMakeLists.txt
++++ b/ReactAndroid/src/main/jni/react/hermes/reactexecutor/CMakeLists.txt
+@@ -17,7 +17,6 @@
+ target_compile_options(
+         hermes_executor
+         PRIVATE
+-        $<$<CONFIG:Debug>:-DHERMES_ENABLE_DEBUGGER=1>
+         -std=c++20
+         -fexceptions
+ )
+@@ -26,7 +25,7 @@
+ target_link_libraries(
+         hermes_executor
+         hermes_executor_common
+-        hermes-engine::libhermes
++        hermes-engine::hermesvm
+         jsi
+         reactnative
+ )
+--- a/ReactAndroid/src/main/jni/react/hermes/reactexecutor/OnLoad.cpp
++++ b/ReactAndroid/src/main/jni/react/hermes/reactexecutor/OnLoad.cpp
+@@ -57,7 +57,9 @@
+     JReactMarker::setLogPerfMarkerIfNeeded();
+ 
+     std::call_once(flag, []() {
+-      facebook::hermes::HermesRuntime::setFatalHandler(hermesFatalHandler);
++      // Hermes V1 replaced the static setFatalHandler with an
++      // ICast-based ISetFatalHandler interface; skipped for now.
++      (void)hermesFatalHandler;
+     });
+     auto factory = std::make_unique<HermesExecutorFactory>(installBindings);
+     factory->setEnableDebugger(enableDebugger);
+@@ -75,7 +77,9 @@
+     JReactMarker::setLogPerfMarkerIfNeeded();
+     auto runtimeConfig = makeRuntimeConfig(heapSizeMB);
+     std::call_once(flag, []() {
+-      facebook::hermes::HermesRuntime::setFatalHandler(hermesFatalHandler);
++      // Hermes V1 replaced the static setFatalHandler with an
++      // ICast-based ISetFatalHandler interface; skipped for now.
++      (void)hermesFatalHandler;
+     });
+     auto factory = std::make_unique<HermesExecutorFactory>(
+         installBindings, JSIExecutor::defaultTimeoutInvoker, runtimeConfig);
+--- a/ReactAndroid/src/main/jni/react/hermes/tooling/CMakeLists.txt
++++ b/ReactAndroid/src/main/jni/react/hermes/tooling/CMakeLists.txt
+@@ -28,7 +28,7 @@
+         PUBLIC
+         reactnative
+         jsi
+-        hermes-engine::libhermes
++        hermes-engine::hermesvm
+ )
+ target_include_directories(hermestooling
+         PUBLIC
+--- a/ReactAndroid/src/main/jni/react/runtime/hermes/jni/CMakeLists.txt
++++ b/ReactAndroid/src/main/jni/react/runtime/hermes/jni/CMakeLists.txt
+@@ -17,7 +17,6 @@
+ target_compile_options(
+         hermesinstancejni
+         PRIVATE
+-        $<$<CONFIG:Debug>:-DHERMES_ENABLE_DEBUGGER=1>
+         -std=c++20
+         -fexceptions
+ )
+@@ -26,7 +25,7 @@
+ target_merge_so(hermesinstancejni)
+ 
+ target_link_libraries(hermesinstancejni
+-        hermes-engine::libhermes
++        hermes-engine::hermesvm
+         jsitooling
+         fbjni
+         bridgelesshermes
+--- a/ReactAndroid/src/main/jni/react/runtime/jni/CMakeLists.txt
++++ b/ReactAndroid/src/main/jni/react/runtime/jni/CMakeLists.txt
+@@ -17,7 +17,6 @@
+ target_compile_options(
+         rninstance
+         PRIVATE
+-        $<$<CONFIG:Debug>:-DHERMES_ENABLE_DEBUGGER=1>
+         -std=c++20
+         -fexceptions
+ )
+--- a/ReactCommon/hermes/executor/CMakeLists.txt
++++ b/ReactCommon/hermes/executor/CMakeLists.txt
+@@ -16,7 +16,7 @@
+ )
+ target_include_directories(hermes_executor_common PUBLIC .)
+ target_link_libraries(hermes_executor_common
+-        hermes-engine::libhermes
++        hermes-engine::hermesvm
+         hermes_inspector_modern
+         jsi
+         reactnative
+@@ -26,7 +26,6 @@
+         target_compile_options(
+                 hermes_executor_common
+                 PRIVATE
+-                -DHERMES_ENABLE_DEBUGGER=1
+         )
+ else()
+         target_compile_options(
+--- a/ReactCommon/hermes/executor/HermesExecutorFactory.cpp
++++ b/ReactCommon/hermes/executor/HermesExecutorFactory.cpp
+@@ -14,8 +14,10 @@
+ #include <jsinspector-modern/InspectorFlags.h>
+ 
+ #include <hermes/inspector-modern/chrome/HermesRuntimeTargetDelegate.h>
++#ifdef HERMES_ENABLE_DEBUGGER
+ #include <hermes/inspector-modern/chrome/Registration.h>
+ #include <hermes/inspector/RuntimeAdapter.h>
++#endif
+ 
+ using namespace facebook::hermes;
+ using namespace facebook::jsi;
+--- a/ReactCommon/hermes/inspector-modern/CMakeLists.txt
++++ b/ReactCommon/hermes/inspector-modern/CMakeLists.txt
+@@ -23,12 +23,11 @@
+         target_compile_options(
+                 hermes_inspector_modern
+                 PRIVATE
+-                -DHERMES_ENABLE_DEBUGGER=1
+         )
+ endif()
+ 
+ target_include_directories(hermes_inspector_modern PUBLIC ${REACT_COMMON_DIR})
+ target_link_libraries(hermes_inspector_modern
+-        hermes-engine::libhermes
++        hermes-engine::hermesvm
+         jsi
+         reactnative)
+--- a/ReactCommon/hermes/inspector-modern/chrome/HermesRuntimeSamplingProfileSerializer.cpp
++++ b/ReactCommon/hermes/inspector-modern/chrome/HermesRuntimeSamplingProfileSerializer.cpp
+@@ -5,164 +5,20 @@
+  * LICENSE file in the root directory of this source tree.
+  */
+ 
++// Stubbed for Hermes V1: V1's sampling_profiler API uses a std::variant-based
++// frame representation; the original implementation expected the older
++// getKind()-based class hierarchy. Profiling output from this path will be
++// empty until the converter is rewritten against V1's API.
++
+ #include "HermesRuntimeSamplingProfileSerializer.h"
+ 
+ namespace facebook::react::jsinspector_modern::tracing {
+ 
+-namespace {
+-
+-/// Fallback script ID for call frames, when Hermes didn't provide one or when
+-/// this frame is part of the VM, like native functions, used for parity with
+-/// Chromium + V8.
+-const uint32_t FALLBACK_SCRIPT_ID = 0;
+-/// Garbage collector frame name, used for parity with Chromium + V8.
+-const std::string GARBAGE_COLLECTOR_FRAME_NAME = "(garbage collector)";
+-
+-/// Filters out Hermes Suspend frames related to Debugger.
+-/// Even though Debugger domain is expected to be disabled, Hermes might run
+-/// Debugger loop while recording sampling profile. We only allow GC frames.
+-bool shouldIgnoreHermesFrame(
+-    hermes::sampling_profiler::ProfileSampleCallStackFrame* hermesFrame) {
+-  if (hermesFrame->getKind() !=
+-      hermes::sampling_profiler::ProfileSampleCallStackFrame::Kind::Suspend) {
+-    return false;
+-  }
+-
+-  auto* suspendFrame = static_cast<
+-      hermes::sampling_profiler::ProfileSampleCallStackSuspendFrame*>(
+-      hermesFrame);
+-  auto suspendFrameKind = suspendFrame->getSuspendFrameKind();
+-  return suspendFrameKind !=
+-      hermes::sampling_profiler::ProfileSampleCallStackSuspendFrame::
+-          SuspendFrameKind::GC;
+-}
+-
+-RuntimeSamplingProfile::SampleCallStackFrame convertHermesFrameToTracingFrame(
+-    hermes::sampling_profiler::ProfileSampleCallStackFrame* hermesFrame) {
+-  switch (hermesFrame->getKind()) {
+-    case hermes::sampling_profiler::ProfileSampleCallStackFrame::Kind::
+-        JSFunction: {
+-      auto* jsFunctionFrame = static_cast<
+-          hermes::sampling_profiler::ProfileSampleCallStackJSFunctionFrame*>(
+-          hermesFrame);
+-      return RuntimeSamplingProfile::SampleCallStackFrame{
+-          RuntimeSamplingProfile::SampleCallStackFrame::Kind::JSFunction,
+-          jsFunctionFrame->hasScriptId() ? jsFunctionFrame->getScriptId()
+-                                         : FALLBACK_SCRIPT_ID,
+-          jsFunctionFrame->getFunctionName(),
+-          jsFunctionFrame->hasUrl()
+-              ? std::optional<std::string>{jsFunctionFrame->getUrl()}
+-              : std::nullopt,
+-          jsFunctionFrame->hasLineNumber()
+-              ? std::optional<uint32_t>{jsFunctionFrame->getLineNumber() - 1}
+-              // Hermes VM keeps line numbers as 1-based. Convert to
+-              // 0-based.
+-              : std::nullopt,
+-          jsFunctionFrame->hasColumnNumber()
+-              ? std::optional<uint32_t>{jsFunctionFrame->getColumnNumber() - 1}
+-              // Hermes VM keeps column numbers as 1-based. Convert to
+-              // 0-based.
+-              : std::nullopt,
+-      };
+-    }
+-    case hermes::sampling_profiler::ProfileSampleCallStackFrame::Kind::
+-        NativeFunction: {
+-      auto* nativeFunctionFrame =
+-          static_cast<hermes::sampling_profiler::
+-                          ProfileSampleCallStackNativeFunctionFrame*>(
+-              hermesFrame);
+-
+-      return RuntimeSamplingProfile::SampleCallStackFrame{
+-          RuntimeSamplingProfile::SampleCallStackFrame::Kind::NativeFunction,
+-          FALLBACK_SCRIPT_ID, // JavaScript Runtime defines the implementation
+-                              // for native function, no script ID to reference.
+-          nativeFunctionFrame->getFunctionName(),
+-      };
+-    }
+-    case hermes::sampling_profiler::ProfileSampleCallStackFrame::Kind::
+-        HostFunction: {
+-      auto* hostFunctionFrame = static_cast<
+-          hermes::sampling_profiler::ProfileSampleCallStackHostFunctionFrame*>(
+-          hermesFrame);
+-
+-      return RuntimeSamplingProfile::SampleCallStackFrame{
+-          RuntimeSamplingProfile::SampleCallStackFrame::Kind::HostFunction,
+-          FALLBACK_SCRIPT_ID, // JavaScript Runtime defines the implementation
+-                              // for host function, no script ID to reference.
+-          hostFunctionFrame->getFunctionName(),
+-      };
+-    }
+-    case hermes::sampling_profiler::ProfileSampleCallStackFrame::Kind::
+-        Suspend: {
+-      auto* suspendFrame = static_cast<
+-          hermes::sampling_profiler::ProfileSampleCallStackSuspendFrame*>(
+-          hermesFrame);
+-      auto suspendFrameKind = suspendFrame->getSuspendFrameKind();
+-      if (suspendFrameKind ==
+-          hermes::sampling_profiler::ProfileSampleCallStackSuspendFrame::
+-              SuspendFrameKind::GC) {
+-        return RuntimeSamplingProfile::SampleCallStackFrame{
+-            RuntimeSamplingProfile::SampleCallStackFrame::Kind::
+-                GarbageCollector,
+-            FALLBACK_SCRIPT_ID, // GC frames are part of the VM, no script ID to
+-                                // reference.
+-            GARBAGE_COLLECTOR_FRAME_NAME,
+-        };
+-      }
+-
+-      // We should have filtered out Debugger Suspend frames before in
+-      // shouldFilterOutHermesFrame().
+-      throw std::logic_error{
+-          "Unexpected Suspend frame found in Hermes call stack"};
+-    }
+-
+-    default:
+-      throw std::logic_error{"Unknown Hermes stack frame kind"};
+-  }
+-}
+-
+-RuntimeSamplingProfile::Sample convertHermesSampleToTracingSample(
+-    hermes::sampling_profiler::ProfileSample& hermesSample) {
+-  uint64_t reconciledTimestamp = hermesSample.getTimestamp();
+-  std::vector<hermes::sampling_profiler::ProfileSampleCallStackFrame*>
+-      hermesSampleCallStack = hermesSample.getCallStack();
+-
+-  std::vector<RuntimeSamplingProfile::SampleCallStackFrame>
+-      reconciledSampleCallStack;
+-  reconciledSampleCallStack.reserve(hermesSampleCallStack.size());
+-
+-  for (auto* hermesFrame : hermesSampleCallStack) {
+-    if (shouldIgnoreHermesFrame(hermesFrame)) {
+-      continue;
+-    }
+-    RuntimeSamplingProfile::SampleCallStackFrame reconciledFrame =
+-        convertHermesFrameToTracingFrame(hermesFrame);
+-    reconciledSampleCallStack.push_back(std::move(reconciledFrame));
+-  }
+-
+-  return RuntimeSamplingProfile::Sample{
+-      reconciledTimestamp,
+-      hermesSample.getThreadId(),
+-      std::move(reconciledSampleCallStack)};
+-}
+-
+-} // namespace
+-
+ /* static */ RuntimeSamplingProfile
+ HermesRuntimeSamplingProfileSerializer::serializeToTracingSamplingProfile(
+-    const hermes::sampling_profiler::Profile& hermesProfile) {
+-  std::vector<hermes::sampling_profiler::ProfileSample> hermesSamples =
+-      hermesProfile.getSamples();
+-  std::vector<RuntimeSamplingProfile::Sample> reconciledSamples;
+-  reconciledSamples.reserve(hermesSamples.size());
+-
+-  for (auto& hermesSample : hermesSamples) {
+-    RuntimeSamplingProfile::Sample reconciledSample =
+-        convertHermesSampleToTracingSample(hermesSample);
+-    reconciledSamples.push_back(std::move(reconciledSample));
+-  }
+-
+-  return RuntimeSamplingProfile{"Hermes", std::move(reconciledSamples)};
++    const hermes::sampling_profiler::Profile& /*hermesProfile*/) {
++  return RuntimeSamplingProfile{
++      "Hermes", std::vector<RuntimeSamplingProfile::Sample>{}};
+ }
+ 
+ } // namespace facebook::react::jsinspector_modern::tracing
+--- a/ReactCommon/jsc/CMakeLists.txt
++++ b/ReactCommon/jsc/CMakeLists.txt
+@@ -15,6 +15,7 @@
+         -frtti
+         -O3
+         -Wno-unused-lambda-capture
++        -Wno-overloaded-virtual
+         -DLOG_TAG=\"ReactNative\")
+ 
+ include(${REACT_ANDROID_DIR}/src/main/jni/first-party/jni-lib-merge/SoMerging-utils.cmake)
+--- a/ReactCommon/react/runtime/CMakeLists.txt
++++ b/ReactCommon/react/runtime/CMakeLists.txt
+@@ -15,7 +15,6 @@
+ target_compile_options(
+         bridgeless
+         PRIVATE
+-        $<$<CONFIG:Debug>:-DHERMES_ENABLE_DEBUGGER=1>
+         -std=c++20
+         -fexceptions
+ )
+--- a/ReactCommon/react/runtime/hermes/CMakeLists.txt
++++ b/ReactCommon/react/runtime/hermes/CMakeLists.txt
+@@ -17,7 +17,7 @@
+ target_include_directories(bridgelesshermes PUBLIC .)
+ 
+ target_link_libraries(bridgelesshermes
+-        hermes-engine::libhermes
++        hermes-engine::hermesvm
+         hermes_executor_common
+         hermes_inspector_modern
+         jsi
+@@ -29,6 +29,5 @@
+         target_compile_options(
+                 bridgelesshermes
+                 PRIVATE
+-                -DHERMES_ENABLE_DEBUGGER=1
+         )
+ endif()
