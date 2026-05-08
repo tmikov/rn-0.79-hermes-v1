@@ -1,8 +1,13 @@
 # React Native Hermes-swap experiment
 
-Notes for setting up a baseline RN 0.79.5 Android app and rebuilding its
-native side (including Hermes) from source, as a stepping stone toward
-swapping in a newer Hermes/JSI.
+RN 0.79.5 with stock Hermes swapped out for **Hermes V1** (`static_h`),
+running on Android. The baseline app (`sample79/`) and the patches that
+do the swap are committed in this repo — see **Quick start** below.
+
+The rest of the README (§§1–7) is the linear diary of how we got here:
+bootstrapping the RN app, building it from prebuilts, building Hermes
+from source, and finally the V1 swap and release path. Useful as
+reference; not needed for the happy path.
 
 ## Prerequisites
 
@@ -25,7 +30,94 @@ export ANDROID_HOME="$HOME/Library/Android/sdk"
 export PATH="$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$PATH"
 ```
 
+One more one-time setup: a no-op `sdkmanager` stub. RN 0.79's
+`hermes-engine` Gradle module wires up a call to `$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager`
+at *configuration* time even though it only *runs* it when CMake is
+missing. Configuration fails if the binary isn't there. (See §5b for
+context — a real `cmdline-tools` install also works.)
+
+```bash
+mkdir -p "$ANDROID_HOME/cmdline-tools/latest/bin"
+printf '#!/bin/sh\nexit 0\n' > "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+chmod +x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+```
+
+## Quick start
+
+The fast path from a fresh clone to a Hermes V1 app on the emulator.
+
+### Debug APK (Metro serves the JS)
+
+```bash
+cd sample79
+npm install                                 # baseline npm deps
+
+# Apply the three patches (RN-side, then app-side):
+( cd node_modules/react-native && \
+  patch -p1 -i ../../../patches/01-jsi-vendoring.patch && \
+  patch -p1 -i ../../../patches/02-rn-surgery.patch )
+patch -p1 -i ../patches/03-app-side.patch
+
+cd android
+./gradlew --no-daemon assembleDebug          # ~4 min cold, much faster incremental
+```
+
+(`--no-daemon` works around a sandboxing issue with the Gradle daemon's
+localhost socket; drop it if not running under sandbox restrictions.)
+
+Boot the emulator and launch:
+
+```bash
+emulator -avd Medium_Phone_API_36 &           # boot in background
+
+cd /path/to/sample79
+adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+npx react-native start &                     # Metro
+adb reverse tcp:8081 tcp:8081
+adb shell am start -n com.sample79/.MainActivity
+```
+
+Verify V1 ran the bundle:
+
+```bash
+adb logcat -d ReactNativeJS:V '*:S' | tail
+# expect: ReactNativeJS: Running "sample79" with {...}
+```
+
+### Release APK (HBC bundle baked in, no Metro)
+
+The release build inlines a precompiled HBC bundle, so it needs the V1
+host bytecode compiler (`hermesc`). RN 0.79's bundled `hermesc` emits
+HBC v96; V1 requires v98. The matching host compiler is in the
+`hermes-compiler` npm package (versioned in lockstep with the
+`hermes-android` AAR).
+
+After the debug path works:
+
+```bash
+cd sample79
+npm install hermes-compiler@250829098.0.13 --save-dev
+
+cd android
+./gradlew --no-daemon assembleRelease         # ~4 min cold
+
+adb uninstall com.sample79                    # release uses a different keystore
+adb install app/build/outputs/apk/release/app-release.apk
+adb shell am start -n com.sample79/.MainActivity
+```
+
+(`hermesCommand` in `app/build.gradle` is already set by patch 03; the
+gradle plugin substitutes `%OS-BIN%` for the host-OS bin dir at build
+time.)
+
+Verify with `adb logcat -d ReactNativeJS:V '*:S' | tail` — same expected
+output, no Metro needed.
+
 ## 1. Create the project
+
+(The committed `sample79/` is exactly what this command produces. Skip
+unless you want to regenerate the baseline against a different RN
+version.)
 
 ```bash
 npx @react-native-community/cli init sample79 --version 0.79.5
