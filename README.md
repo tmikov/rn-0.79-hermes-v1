@@ -183,7 +183,7 @@ understand each change). Both end at the same place.
 
 #### Option A — apply the patches (recommended)
 
-Two patch files cover the entire RN-side modification:
+Three patch files cover the entire modification:
 
 - **`patches/01-jsi-vendoring.patch`** — wholesale replacement of RN 0.79's
   `ReactCommon/jsi/jsi/` with the JSI from
@@ -200,22 +200,29 @@ Two patch files cover the entire RN-side modification:
   for V1 API drift (sampling profiler, `setFatalHandler`, one unconditional
   inspector include), and a `-Wno-overloaded-virtual` for JSC.
 
+- **`patches/03-app-side.patch`** — the two app-side gradle edits documented
+  in §6b (V1 Maven coord substitution in `android/settings.gradle`) and §7b
+  (`hermesCommand` in `android/app/build.gradle`). Applied from `sample79/`,
+  not from inside `node_modules/react-native/`. The §7a `npm install
+  hermes-compiler` step is *not* covered by this patch — it's an `npm`
+  command, not a source edit.
+
 Apply, then build:
 
 ```bash
 cd sample79/node_modules/react-native
 patch -p1 -i ../../../patches/01-jsi-vendoring.patch
 patch -p1 -i ../../../patches/02-rn-surgery.patch
+cd ../..
+patch -p1 -i ../patches/03-app-side.patch
 
-# Then also do step 6b's sample79/android/settings.gradle edit
-# (it's an app-level change, not in the RN-side patches), then build:
-cd ../../android
+cd android
 ./gradlew --no-daemon assembleDebug
 ```
 
-Skip ahead to **6i** (build / install / run) once the patches are applied
-and the `settings.gradle` substitution is updated. The remainder of section
-6 (6a–6h) is the same content presented as manual steps.
+Skip ahead to **6i** (build / install / run) once the patches are applied.
+The remainder of section 6 (6a–6h) is the same content presented as manual
+steps.
 
 To regenerate these patches against a different RN snapshot or after
 upstream JSI/Hermes changes, see `patches/REGENERATE.md` (sketch: download
@@ -255,6 +262,8 @@ which is fine since RN already compiles surrounding C++ at 17/20.
 If you bump the V1 AAR version in §6b, update `TAG` here and re-vendor.
 
 ### 6b. Switch the Gradle substitution to the V1 prebuilt
+
+(Covered by `patches/03-app-side.patch` if you took §6 Option A.)
 
 In `sample79/android/settings.gradle`, change the hermes-android substitution
 to point at the V1 Maven coord:
@@ -510,6 +519,8 @@ node_modules/hermes-compiler/hermesc/osx-bin/hermesc -version
 ```
 
 ### 7b. Point RN's gradle plugin at V1 hermesc
+
+(Covered by `patches/03-app-side.patch` if you took §6 Option A.)
 
 In `sample79/android/app/build.gradle`, set `hermesCommand` inside the
 `react {}` block (the `%OS-BIN%` token is substituted by RN's gradle

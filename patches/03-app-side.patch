@@ -1,0 +1,27 @@
+diff --git a/android/app/build.gradle b/android/app/build.gradle
+index 112ba81..295add1 100644
+--- a/android/app/build.gradle
++++ b/android/app/build.gradle
+@@ -46,6 +46,7 @@ react {
+     /* Hermes Commands */
+     //   The hermes compiler command to run. By default it is 'hermesc'
+     // hermesCommand = "$rootDir/my-custom-hermesc/bin/hermesc"
++    hermesCommand = file("../../node_modules/hermes-compiler/hermesc/%OS-BIN%/hermesc").absolutePath
+     //
+     //   The list of flags to pass to the Hermes compiler. By default is "-O", "-output-source-map"
+     // hermesFlags = ["-O", "-output-source-map"]
+diff --git a/android/settings.gradle b/android/settings.gradle
+index 2ca68f6..2d96b1c 100644
+--- a/android/settings.gradle
++++ b/android/settings.gradle
+@@ -4,3 +4,10 @@ extensions.configure(com.facebook.react.ReactSettingsExtension){ ex -> ex.autoli
+ rootProject.name = 'sample79'
+ include ':app'
+ includeBuild('../node_modules/@react-native/gradle-plugin')
++
++includeBuild('../node_modules/react-native') {
++    dependencySubstitution {
++        substitute(module("com.facebook.react:react-android")).using(project(":packages:react-native:ReactAndroid"))
++        substitute(module("com.facebook.react:hermes-android")).using(module("com.facebook.hermes:hermes-android:250829098.0.13"))
++    }
++}

@@ -1,13 +1,18 @@
 # Regenerating the patches
 
-Both patches in this directory describe the diff between **pristine RN
-0.79.5 from npm** and our **modified `node_modules/react-native/`** in
-`sample79/`. Regenerate when:
+There are three patches:
 
-- you bump the Hermes V1 AAR version (must re-vendor JSI from the matching
-  `hermes-v<aar-version>` tag — see "JSI tag pinning" below);
-- you re-vendor JSI for any other reason;
-- you edit anything in the modified `node_modules/react-native/` tree.
+- `01-jsi-vendoring.patch` and `02-rn-surgery.patch` describe the diff
+  between **pristine RN 0.79.5 from npm** and our **modified
+  `node_modules/react-native/`** in `sample79/`. Regenerate when:
+  - you bump the Hermes V1 AAR version (must re-vendor JSI from the
+    matching `hermes-v<aar-version>` tag — see "JSI tag pinning" below);
+  - you re-vendor JSI for any other reason;
+  - you edit anything in the modified `node_modules/react-native/` tree.
+- `03-app-side.patch` describes the diff between the **pristine
+  `sample79/`** (as committed in this repo) and the modified
+  `android/settings.gradle` + `android/app/build.gradle`. See
+  "Regenerating patch 03" below.
 
 ## JSI tag pinning
 
@@ -113,16 +118,30 @@ diff -ruN -x .gradle -x sdks -x .cxx -x build -x node_modules \
 rm -rf "$TMP"
 ```
 
+## Regenerating patch 03
+
+Patch 03 covers `sample79/android/settings.gradle` and
+`sample79/android/app/build.gradle`. The pristine reference is the
+committed copy of those files in this repo's `sample79/` subtree, so a
+plain `git diff` from the parent repo's root produces it directly:
+
+```bash
+cd /path/to/directtv
+git diff -- sample79/android/settings.gradle \
+            sample79/android/app/build.gradle \
+  | sed 's|sample79/||g' \
+  > patches/03-app-side.patch
+```
+
+The `sed` strips the `sample79/` prefix from the diff headers so the
+patch applies with `patch -p1` from inside `sample79/` (matching how the
+README §6 Option A invokes it).
+
 ## What's *not* in the patches
 
-The patches only cover `node_modules/react-native/`. The other changes
-live outside that tree and have to be applied separately:
-
-- `sample79/android/settings.gradle` — the `dependencySubstitution` block
-  (covered in README §6b). In the app, not RN.
-- `sample79/android/app/build.gradle` — `hermesCommand` for release
-  builds (covered in README §7b). In the app, not RN.
-- `sample79/package.json` — `hermes-compiler` devDependency for the V1
-  hermesc (covered in README §7a). In the app, not RN.
+- `sample79/package.json` / `package-lock.json` — `hermes-compiler`
+  devDependency for the V1 hermesc (covered in README §7a). It's an
+  `npm install` step, not a source edit; patches don't compose well with
+  npm lockfiles.
 - The `sdkmanager` stub at `$ANDROID_HOME/cmdline-tools/latest/bin/`
   (covered in README §5b). Filesystem-level, not in any source tree.
