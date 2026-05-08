@@ -260,8 +260,10 @@ consuming V1 as a Maven prebuilt instead of building Hermes inline. See
   vendor the matching JSI from `facebook/hermes:static_h:API/jsi/jsi/` over
   RN 0.79's `ReactCommon/jsi/jsi/`.
 - V1's Hermes API has shifted in places (sampling profiler, CDP vs. old
-  inspector, `setFatalHandler`). We stub or `#ifdef` the affected RN code —
-  Chrome devtools / sampling profiler features are sacrificed for now.
+  inspector, `setFatalHandler`). We stub or `#ifdef` the affected RN
+  code; sampling profiler stays sacrificed, but Chrome devtools is
+  restored via a small CDP adapter shim (§6i, design notes in
+  `CDP_ADAPTER_PLAN.md`).
 
 You should have already done sections 1, 5a, and 5b above (the `includeBuild`
 block in `settings.gradle`, and the `sdkmanager` stub). Section 5c is **not**
@@ -324,10 +326,12 @@ cd android
 ./gradlew --no-daemon assembleDebug
 ```
 
-Skip ahead to **6i** (build / install / run) once the patches are applied.
-The remainder of section 6 (6a–6h) is the same content presented as manual
-steps; the CDP shim is *not* documented as manual steps — see
-`CDP_ADAPTER_PLAN.md`.
+Skip ahead to **6j** (build / install / run) once the patches are applied.
+The rest of section 6 walks through the same changes manually:
+§6a–§6h mirror what patches 01 + 02 do; §6i is the CDP-adapter shim
+(patch 04), which §6e and §6g touch — see the cross-references in
+those sections. The shim itself is too large to inline so §6i directs
+you to apply patch 04 even within the manual walkthrough.
 
 To regenerate these patches against a different RN snapshot or after
 upstream JSI/Hermes changes, see `patches/REGENERATE.md` (sketch: download
@@ -437,11 +441,19 @@ done
 
 ### 6e. Disable HERMES_ENABLE_DEBUGGER
 
+> **Note:** §6i later reverses this step (the CDP shim provides a
+> working back-end so we keep `HERMES_ENABLE_DEBUGGER` on in the
+> final state). The intermediate "off" state is what makes the
+> inspector-modern code in §6f and §6g drop out cleanly without
+> needing a shim yet — patch 02 captures exactly this state.
+> If you only care about the final tree, you can fast-forward by
+> applying patches 01+02+04 (i.e., switch to Option A above).
+
 V1 replaces the old `hermes/inspector/*` headers with `hermes/cdp/*`. RN
 0.79's "inspector-modern" code targets the old API and won't compile. The
 inspector code is gated on `HERMES_ENABLE_DEBUGGER`, so undefining it makes
-the offending code drop out. (Cost: no Chrome devtools debugging until
-inspector-modern is rewritten against `hermes/cdp/*`.)
+the offending code drop out. (Cost: no Chrome devtools debugging — until
+§6i adds the shim.)
 
 7 standalone `HERMES_ENABLE_DEBUGGER` lines can be deleted outright; from
 `sample79/node_modules/react-native`:
@@ -493,6 +505,10 @@ These RN sources use Hermes APIs that shifted between RN 0.79's pinned
 Hermes commit and `static_h`. Stubbed for now (functionality lost,
 compilability gained). Mark the file with a comment so the next person
 knows what's missing.
+
+(§6i adds a fourth stub for `HermesRuntimeTargetDelegate.cpp`, which
+is only needed once `HERMES_ENABLE_DEBUGGER` is back on — without §6e
+it would belong here too.)
 
 **`ReactCommon/hermes/inspector-modern/chrome/HermesRuntimeSamplingProfileSerializer.cpp`** —
 V1's `sampling_profiler::ProfileSampleCallStackFrame` is a `std::variant`
@@ -568,7 +584,60 @@ to JSC's compile options in
 still compiled. Properly fixing this means adding the missing JSI virtuals
 in JSCRuntime; -Wno is the path of least resistance.)
 
-### 6i. Build, install, run
+### 6i. Add the CDP adapter shim (restores devtools)
+
+§6e–§6h leave you with a working V1 build but no Chrome devtools.
+This step re-enables `HERMES_ENABLE_DEBUGGER` and adds a small
+adapter shim so RN's inspector-modern code can keep including the
+old `hermes/inspector/*` headers while delegating to V1's
+`hermes/cdp/CDPAgent`. The shim is captured in
+**`patches/04-cdp-adapter.patch`** — apply it directly even within
+the manual walkthrough; the new source files (~600 lines) are too
+large to inline:
+
+```bash
+cd sample79/node_modules/react-native
+patch -p1 -i ../../../patches/04-cdp-adapter.patch
+```
+
+What patch 04 does, at a glance:
+
+- **Reverses §6e**: re-adds `-DHERMES_ENABLE_DEBUGGER=1` (or the
+  `$<$<CONFIG:Debug>:...>` generator-expression equivalent) to the
+  same 8 CMake spots §6e stripped. The §6f `#ifdef` wrap stays —
+  it's defensive and harmless.
+- **Adds a fourth stub** to §6g's list:
+  `ReactCommon/hermes/inspector-modern/chrome/HermesRuntimeTargetDelegate.cpp`'s
+  three sampling-profiler methods (`enableSamplingProfiler`,
+  `disableSamplingProfiler`, `collectSamplingProfile`) — V1 moved the
+  underlying `HermesRuntime` entry points to an `IHermesRootAPI`
+  interface and removed `dumpSampledTraceToProfile` entirely. Same
+  treatment as the other sampling-profiler stubs; the now-unused
+  `HERMES_SAMPLING_FREQUENCY_HZ` constant is dropped to keep
+  `-Werror=unused-const-variable` happy.
+- **Adds new files** under `ReactCommon/hermes/inspector/`:
+  `RuntimeAdapter.{h,cpp}` (re-exposes the old base class plus a new
+  `enqueueRuntimeTask` virtual that the V1 CDP back-end requires) and
+  `chrome/CDPHandler.{h,cpp}` (the actual V1-API translation, with a
+  per-runtime refcounted `CDPDebugAPI` registry).
+- **Adds a new CMake target** `hermes_inspector_shim` (an `OBJECT`
+  library) built with `-DHERMES_ENABLE_DEBUGGER=1` (needed because
+  `hermes/AsyncDebuggerAPI.h` gates the real V1 API on that define),
+  registered as a sub-directory in
+  `ReactAndroid/src/main/jni/CMakeLists.txt`, linked into
+  `hermes_inspector_modern`, `hermes_executor_common`,
+  `bridgelesshermes`, and `reactnative_unittest`, and aggregated
+  into `libhermestooling.so` via `$<TARGET_OBJECTS:...>`.
+- **Overrides `enqueueRuntimeTask`** in the two `RuntimeAdapter`
+  subclasses (`HermesExecutorRuntimeAdapter` in
+  `HermesExecutorFactory.cpp` and `HermesInstanceRuntimeAdapter` in
+  `HermesInstance.cpp`), routing tasks through their existing
+  `MessageQueueThread::runOnQueue`.
+
+Design notes (open questions, MVP scope-cuts, risks) are in
+`CDP_ADAPTER_PLAN.md` at the repo root.
+
+### 6j. Build, install, run
 
 ```bash
 cd sample79/android
