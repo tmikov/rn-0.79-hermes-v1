@@ -1,0 +1,106 @@
+--- a/ReactCommon/hermes/inspector/RuntimeAdapter.h
++++ b/ReactCommon/hermes/inspector/RuntimeAdapter.h
+@@ -0,0 +1,60 @@
++/*
++ * Copyright (c) Meta Platforms, Inc. and affiliates.
++ *
++ * This source code is licensed under the MIT license found in the
++ * LICENSE file in the root directory of this source tree.
++ *
++ * Hermes V1 CDP adapter shim. Re-exposes the old hermes/inspector/
++ * RuntimeAdapter API so that RN 0.79's inspector-modern code (which
++ * still includes <hermes/inspector/RuntimeAdapter.h>) compiles unchanged.
++ *
++ * The adapter adds one new virtual, enqueueRuntimeTask, that the V1
++ * CDP back-end requires for posting runtime-thread tasks. Concrete
++ * adapters (HermesExecutorRuntimeAdapter, HermesInstanceRuntimeAdapter)
++ * must override it.
++ */
++
++#pragma once
++
++#include <functional>
++#include <memory>
++
++#include <hermes/hermes.h>
++
++#ifndef INSPECTOR_EXPORT
++#define INSPECTOR_EXPORT __attribute__((visibility("default")))
++#endif
++
++namespace facebook {
++namespace hermes {
++namespace inspector_modern {
++
++class INSPECTOR_EXPORT RuntimeAdapter {
++ public:
++  virtual ~RuntimeAdapter() = 0;
++  virtual HermesRuntime& getRuntime() = 0;
++
++  /// Optional. Default no-op. Old API; some legacy paths invoked this to
++  /// nudge the runtime thread. The V1 CDP back-end does not call it.
++  virtual void tickleJs();
++
++  /// Post a task that runs on the runtime thread (with exclusive access
++  /// to the runtime). The default implementation aborts; concrete
++  /// adapters MUST override. Required by the V1 CDP back-end.
++  virtual void enqueueRuntimeTask(std::function<void(HermesRuntime&)> task);
++};
++
++class INSPECTOR_EXPORT SharedRuntimeAdapter : public RuntimeAdapter {
++ public:
++  explicit SharedRuntimeAdapter(std::shared_ptr<HermesRuntime> runtime);
++  ~SharedRuntimeAdapter() override;
++
++  HermesRuntime& getRuntime() override;
++
++ private:
++  std::shared_ptr<HermesRuntime> runtime_;
++};
++
++} // namespace inspector_modern
++} // namespace hermes
++} // namespace facebook
+--- a/ReactCommon/hermes/inspector/RuntimeAdapter.cpp
++++ b/ReactCommon/hermes/inspector/RuntimeAdapter.cpp
+@@ -0,0 +1,40 @@
++/*
++ * Copyright (c) Meta Platforms, Inc. and affiliates.
++ *
++ * This source code is licensed under the MIT license found in the
++ * LICENSE file in the root directory of this source tree.
++ */
++
++#include <hermes/inspector/RuntimeAdapter.h>
++
++#include <cstdlib>
++
++namespace facebook {
++namespace hermes {
++namespace inspector_modern {
++
++RuntimeAdapter::~RuntimeAdapter() = default;
++
++void RuntimeAdapter::tickleJs() {}
++
++void RuntimeAdapter::enqueueRuntimeTask(
++    std::function<void(HermesRuntime&)> /*task*/) {
++  // Concrete adapters must override this. Reaching the default means
++  // someone wired an adapter into the V1 CDP back-end without providing
++  // a runtime-thread task queue.
++  std::abort();
++}
++
++SharedRuntimeAdapter::SharedRuntimeAdapter(
++    std::shared_ptr<HermesRuntime> runtime)
++    : runtime_(std::move(runtime)) {}
++
++SharedRuntimeAdapter::~SharedRuntimeAdapter() = default;
++
++HermesRuntime& SharedRuntimeAdapter::getRuntime() {
++  return *runtime_;
++}
++
++} // namespace inspector_modern
++} // namespace hermes
++} // namespace facebook
