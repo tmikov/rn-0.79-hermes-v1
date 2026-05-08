@@ -1,6 +1,6 @@
 # Regenerating the patches
 
-There are three patches:
+There are four patches:
 
 - `01-jsi-vendoring.patch` and `02-rn-surgery.patch` describe the diff
   between **pristine RN 0.79.5 from npm** and our **modified
@@ -8,11 +8,20 @@ There are three patches:
   - you bump the Hermes V1 AAR version (must re-vendor JSI from the
     matching `hermes-v<aar-version>` tag — see "JSI tag pinning" below);
   - you re-vendor JSI for any other reason;
-  - you edit anything in the modified `node_modules/react-native/` tree.
+  - you edit anything in the modified `node_modules/react-native/` tree
+    that's covered by these patches.
 - `03-app-side.patch` describes the diff between the **pristine
   `sample79/`** (as committed in this repo) and the modified
   `android/settings.gradle` + `android/app/build.gradle`. See
   "Regenerating patch 03" below.
+- `04-cdp-adapter.patch` is the CDP-adapter shim that restores the
+  legacy `hermes/inspector/*` API on top of V1's `hermes/cdp/*` API
+  (see `CDP_ADAPTER_PLAN.md` at the repo root). It **layers on top
+  of** patches 01 and 02 — its baseline for diffing is
+  `(pristine RN) + patch 01 + patch 02 applied`, so it can be applied
+  with `patch -p1` cleanly after 01 and 02 (and undoes some of patch
+  02's `HERMES_ENABLE_DEBUGGER` removals where the shim now provides
+  a working back-end). See "Regenerating patch 04" below.
 
 ## JSI tag pinning
 
@@ -106,17 +115,70 @@ output (otherwise the patch headers carry absolute paths).
 
 ## Verify round-trip
 
-Applying both patches to a pristine copy must reproduce the modified tree
-exactly:
+Applying all RN-side patches to a pristine copy must reproduce the
+modified tree exactly:
 
 ```bash
 TMP=$(mktemp -d) && cp -R "$PRISTINE" "$TMP/rn"
 ( cd "$TMP/rn" && patch -p1 -i "$PATCHDIR/01-jsi-vendoring.patch" \
-                && patch -p1 -i "$PATCHDIR/02-rn-surgery.patch" )
+                && patch -p1 -i "$PATCHDIR/02-rn-surgery.patch" \
+                && patch -p1 -i "$PATCHDIR/04-cdp-adapter.patch" )
 diff -ruN -x .gradle -x sdks -x .cxx -x build -x node_modules \
   "$TMP/rn" "$MODIFIED" | wc -l    # must be 0
 rm -rf "$TMP"
 ```
+
+## Regenerating patch 04
+
+Patch 04 layers on top of 01 + 02. Build a temporary post-(01,02)
+baseline, then diff each shim file against it:
+
+```bash
+PRISTINE="/tmp/pristine-rn79/package"
+MODIFIED="/path/to/sample79/node_modules/react-native"
+PATCHDIR="/path/to/this/patches"
+
+CDP_FILES="
+ReactCommon/hermes/inspector/CMakeLists.txt
+ReactCommon/hermes/inspector/RuntimeAdapter.h
+ReactCommon/hermes/inspector/RuntimeAdapter.cpp
+ReactCommon/hermes/inspector/chrome/CDPHandler.h
+ReactCommon/hermes/inspector/chrome/CDPHandler.cpp
+ReactCommon/hermes/executor/CMakeLists.txt
+ReactCommon/hermes/executor/HermesExecutorFactory.cpp
+ReactCommon/hermes/inspector-modern/CMakeLists.txt
+ReactCommon/hermes/inspector-modern/chrome/HermesRuntimeTargetDelegate.cpp
+ReactCommon/react/runtime/CMakeLists.txt
+ReactCommon/react/runtime/hermes/CMakeLists.txt
+ReactCommon/react/runtime/hermes/HermesInstance.cpp
+ReactAndroid/src/main/jni/CMakeLists.txt
+ReactAndroid/src/main/jni/react/hermes/reactexecutor/CMakeLists.txt
+ReactAndroid/src/main/jni/react/hermes/tooling/CMakeLists.txt
+ReactAndroid/src/main/jni/react/runtime/hermes/jni/CMakeLists.txt
+ReactAndroid/src/main/jni/react/runtime/jni/CMakeLists.txt
+"
+
+BASE=$(mktemp -d)
+trap 'rm -rf "$BASE"' EXIT
+cp -R "$PRISTINE/." "$BASE/"
+( cd "$BASE" && patch -p1 --quiet -i "$PATCHDIR/01-jsi-vendoring.patch" \
+                && patch -p1 --quiet -i "$PATCHDIR/02-rn-surgery.patch" )
+
+emit() {
+  local rel="$1"
+  local old="$BASE/$rel"
+  [ -f "$old" ] || old="/dev/null"
+  diff -uN --label "a/$rel" --label "b/$rel" "$old" "$MODIFIED/$rel" || true
+}
+
+> "$PATCHDIR/04-cdp-adapter.patch"
+for rel in $CDP_FILES; do
+  emit "$rel" >> "$PATCHDIR/04-cdp-adapter.patch"
+done
+```
+
+`emit() ... || true` matters: `diff` exits 1 when files differ, which
+is the normal case here, so we suppress that under `set -e`.
 
 ## Regenerating patch 03
 

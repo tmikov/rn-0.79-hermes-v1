@@ -52,10 +52,11 @@ The fast path from a fresh clone to a Hermes V1 app on the emulator.
 cd sample79
 npm install                                 # baseline npm deps
 
-# Apply the three patches (RN-side, then app-side):
+# Apply the four patches (three RN-side, then app-side):
 ( cd node_modules/react-native && \
   patch -p1 -i ../../../patches/01-jsi-vendoring.patch && \
-  patch -p1 -i ../../../patches/02-rn-surgery.patch )
+  patch -p1 -i ../../../patches/02-rn-surgery.patch && \
+  patch -p1 -i ../../../patches/04-cdp-adapter.patch )
 patch -p1 -i ../patches/03-app-side.patch
 
 cd android
@@ -275,7 +276,7 @@ understand each change). Both end at the same place.
 
 #### Option A — apply the patches (recommended)
 
-Three patch files cover the entire modification:
+Four patch files cover the entire modification:
 
 - **`patches/01-jsi-vendoring.patch`** — wholesale replacement of RN 0.79's
   `ReactCommon/jsi/jsi/` with the JSI from
@@ -299,12 +300,23 @@ Three patch files cover the entire modification:
   hermes-compiler` step is *not* covered by this patch — it's an `npm`
   command, not a source edit.
 
+- **`patches/04-cdp-adapter.patch`** — the CDP-adapter shim that restores
+  the legacy `hermes/inspector/*` API on top of V1's `hermes/cdp/*` API.
+  Layers on top of patches 01 + 02; re-enables `HERMES_ENABLE_DEBUGGER`
+  in the 8 CMake spots that patch 02 had stripped, adds two new
+  source files under `ReactCommon/hermes/inspector/`
+  (`RuntimeAdapter.{h,cpp}`, `chrome/CDPHandler.{h,cpp}`) and the
+  CMake plumbing to build them as `hermes_inspector_shim` and bundle
+  the objects into `libhermestooling.so`. See `CDP_ADAPTER_PLAN.md`
+  at the repo root for design notes.
+
 Apply, then build:
 
 ```bash
 cd sample79/node_modules/react-native
 patch -p1 -i ../../../patches/01-jsi-vendoring.patch
 patch -p1 -i ../../../patches/02-rn-surgery.patch
+patch -p1 -i ../../../patches/04-cdp-adapter.patch
 cd ../..
 patch -p1 -i ../patches/03-app-side.patch
 
@@ -314,7 +326,8 @@ cd android
 
 Skip ahead to **6i** (build / install / run) once the patches are applied.
 The remainder of section 6 (6a–6h) is the same content presented as manual
-steps.
+steps; the CDP shim is *not* documented as manual steps — see
+`CDP_ADAPTER_PLAN.md`.
 
 To regenerate these patches against a different RN snapshot or after
 upstream JSI/Hermes changes, see `patches/REGENERATE.md` (sketch: download
@@ -669,4 +682,5 @@ executed the bundle.
 - [x] RN + Hermes built from source via `includeBuild`
 - [x] Hermes V1 swapped in (`com.facebook.hermes:hermes-android`); JS runs on V1
 - [x] Release APK builds and runs on V1 (V1 hermesc from `hermes-compiler` npm package)
-- [ ] Restore Chrome devtools (CDP, against `hermes/cdp/*`) and sampling profiler (against V1's `hermes/Public/SamplingProfiler.h`) — fatal handler intentionally dropped (see §6g)
+- [x] Restore Chrome devtools (CDP, against `hermes/cdp/*`) — done via the shim in `patches/04-cdp-adapter.patch`; design notes in `CDP_ADAPTER_PLAN.md`. End-to-end smoke: `Debugger.enable` over the inspector WebSocket round-trips through V1's `CDPAgent` and emits `Debugger.scriptParsed`. MVP scope-cuts: breakpoints lost across reloads, `waitForDebugger` ignored, console-API ingestion not yet routed.
+- [ ] Sampling profiler (against V1's `hermes/Public/SamplingProfiler.h`) — fatal handler intentionally dropped (see §6g)
