@@ -517,6 +517,14 @@
          jsi
          reactnative
  )
+@@ -26,6 +27,7 @@
+         target_compile_options(
+                 hermes_executor_common
+                 PRIVATE
++                -DHERMES_ENABLE_DEBUGGER=1
+         )
+ else()
+         target_compile_options(
 --- a/ReactCommon/hermes/executor/HermesExecutorFactory.cpp
 +++ b/ReactCommon/hermes/executor/HermesExecutorFactory.cpp
 @@ -55,6 +55,23 @@
@@ -545,13 +553,30 @@
  
 --- a/ReactCommon/hermes/inspector-modern/CMakeLists.txt
 +++ b/ReactCommon/hermes/inspector-modern/CMakeLists.txt
-@@ -29,5 +29,6 @@
+@@ -23,11 +23,13 @@
+         target_compile_options(
+                 hermes_inspector_modern
+                 PRIVATE
++                -DHERMES_ENABLE_DEBUGGER=1
+         )
+ endif()
+ 
  target_include_directories(hermes_inspector_modern PUBLIC ${REACT_COMMON_DIR})
  target_link_libraries(hermes_inspector_modern
          hermes-engine::hermesvm
 +        hermes_inspector_shim
          jsi
          reactnative)
+--- a/ReactCommon/react/runtime/CMakeLists.txt
++++ b/ReactCommon/react/runtime/CMakeLists.txt
+@@ -15,6 +15,7 @@
+ target_compile_options(
+         bridgeless
+         PRIVATE
++        $<$<CONFIG:Debug>:-DHERMES_ENABLE_DEBUGGER=1>
+         -std=c++20
+         -fexceptions
+ )
 --- a/ReactCommon/react/runtime/hermes/CMakeLists.txt
 +++ b/ReactCommon/react/runtime/hermes/CMakeLists.txt
 @@ -20,6 +20,7 @@
@@ -562,6 +587,13 @@
          jsi
          jsinspector
          reactnative
+@@ -29,5 +30,6 @@
+         target_compile_options(
+                 bridgelesshermes
+                 PRIVATE
++                -DHERMES_ENABLE_DEBUGGER=1
+         )
+ endif()
 --- a/ReactCommon/react/runtime/hermes/HermesInstance.cpp
 +++ b/ReactCommon/react/runtime/hermes/HermesInstance.cpp
 @@ -63,6 +63,21 @@
@@ -596,3 +628,43 @@
  add_react_common_subdir(hermes/inspector-modern)
  add_react_common_subdir(react/renderer/runtimescheduler)
  add_react_common_subdir(react/debug)
+@@ -367,7 +368,8 @@
+     -Werror
+     -fexceptions
+     -frtti
+-    -std=c++20)
++    -std=c++20
++    -DHERMES_ENABLE_DEBUGGER)
+ 
+ target_link_libraries(reactnative_unittest
+   fabricjni
+--- a/ReactAndroid/src/main/jni/react/hermes/reactexecutor/CMakeLists.txt
++++ b/ReactAndroid/src/main/jni/react/hermes/reactexecutor/CMakeLists.txt
+@@ -17,6 +17,7 @@
+ target_compile_options(
+         hermes_executor
+         PRIVATE
++        $<$<CONFIG:Debug>:-DHERMES_ENABLE_DEBUGGER=1>
+         -std=c++20
+         -fexceptions
+ )
+--- a/ReactAndroid/src/main/jni/react/runtime/hermes/jni/CMakeLists.txt
++++ b/ReactAndroid/src/main/jni/react/runtime/hermes/jni/CMakeLists.txt
+@@ -17,6 +17,7 @@
+ target_compile_options(
+         hermesinstancejni
+         PRIVATE
++        $<$<CONFIG:Debug>:-DHERMES_ENABLE_DEBUGGER=1>
+         -std=c++20
+         -fexceptions
+ )
+--- a/ReactAndroid/src/main/jni/react/runtime/jni/CMakeLists.txt
++++ b/ReactAndroid/src/main/jni/react/runtime/jni/CMakeLists.txt
+@@ -17,6 +17,7 @@
+ target_compile_options(
+         rninstance
+         PRIVATE
++        $<$<CONFIG:Debug>:-DHERMES_ENABLE_DEBUGGER=1>
+         -std=c++20
+         -fexceptions
+ )
