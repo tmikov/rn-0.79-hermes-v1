@@ -422,7 +422,13 @@ become:
 ```cpp
     std::call_once(flag, []() {
       // Hermes V1 replaced the static setFatalHandler with an
-      // ICast-based ISetFatalHandler interface; skipped for now.
+      // ICast-based ISetFatalHandler interface; skipped permanently.
+      // The original handler was just:
+      //   LOG(ERROR) << "Hermes Fatal: " << reason;
+      //   __android_log_assert(nullptr, "Hermes", "%s", reason.c_str());
+      // which calls abort() internally — so dropping it costs us exactly
+      // one extra logcat line before the SIGABRT. No red box, no JS
+      // stack, no symbolication. Not worth restoring.
       (void)hermesFatalHandler;
     });
 ```
@@ -560,4 +566,4 @@ executed the bundle.
 - [x] RN + Hermes built from source via `includeBuild`
 - [x] Hermes V1 swapped in (`com.facebook.hermes:hermes-android`); JS runs on V1
 - [x] Release APK builds and runs on V1 (V1 hermesc from `hermes-compiler` npm package)
-- [ ] Restore Chrome devtools / sampling profiler / fatal handler against V1 APIs
+- [ ] Restore Chrome devtools (CDP, against `hermes/cdp/*`) and sampling profiler (against V1's `hermes/Public/SamplingProfiler.h`) — fatal handler intentionally dropped (see §6g)
