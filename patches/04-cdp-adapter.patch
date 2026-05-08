@@ -229,6 +229,248 @@
 +} // namespace inspector_modern
 +} // namespace hermes
 +} // namespace facebook
+--- a/ReactCommon/hermes/inspector/chrome/CDPHandler.cpp
++++ b/ReactCommon/hermes/inspector/chrome/CDPHandler.cpp
+@@ -0,0 +1,239 @@
++/*
++ * Copyright (c) Meta Platforms, Inc. and affiliates.
++ *
++ * This source code is licensed under the MIT license found in the
++ * LICENSE file in the root directory of this source tree.
++ */
++
++#include <hermes/inspector/chrome/CDPHandler.h>
++
++#include <hermes/AsyncDebuggerAPI.h>
++#include <hermes/cdp/CDPAgent.h>
++#include <hermes/cdp/CDPDebugAPI.h>
++
++#include <mutex>
++#include <unordered_map>
++#include <utility>
++
++namespace facebook {
++namespace hermes {
++namespace inspector_modern {
++namespace chrome {
++
++// ----- State::Private wraps V1 cdp::State (move-only) ------------------------
++
++struct State::Private {
++  facebook::hermes::cdp::State v1;
++};
++
++State::State(std::unique_ptr<Private> privateState)
++    : privateState_(std::move(privateState)) {}
++
++State::~State() = default;
++
++State::Private& State::get() {
++  return *privateState_;
++}
++
++// ----- Per-runtime CDPDebugAPI registry --------------------------------------
++//
++// CDPDebugAPI owns the AsyncDebuggerAPI for a HermesRuntime; only one should
++// exist per runtime. Multiple CDPHandlers may share it (e.g. two devtools
++// windows), so we refcount.
++//
++// Lifetime keying: the registry uses HermesRuntime* identity. Releases happen
++// when CDPHandler::Impl::~Impl runs, which RN's ConnectionDemux drives during
++// disableDebugging. As long as that ordering holds (handler torn down before
++// runtime), the raw pointer is safe.
++
++namespace {
++
++class CDPDebugAPIRegistry {
++ public:
++  facebook::hermes::cdp::CDPDebugAPI& acquire(HermesRuntime& rt) {
++    std::lock_guard<std::mutex> lock(mu_);
++    auto& entry = map_[&rt];
++    if (!entry.api) {
++      entry.api = facebook::hermes::cdp::CDPDebugAPI::create(rt);
++    }
++    ++entry.refcount;
++    return *entry.api;
++  }
++
++  void release(HermesRuntime& rt) {
++    std::lock_guard<std::mutex> lock(mu_);
++    auto it = map_.find(&rt);
++    if (it == map_.end()) {
++      return;
++    }
++    if (--it->second.refcount == 0) {
++      map_.erase(it);
++    }
++  }
++
++ private:
++  struct Entry {
++    std::unique_ptr<facebook::hermes::cdp::CDPDebugAPI> api;
++    int refcount{0};
++  };
++  std::mutex mu_;
++  std::unordered_map<HermesRuntime*, Entry> map_;
++};
++
++CDPDebugAPIRegistry& registry() {
++  static CDPDebugAPIRegistry instance;
++  return instance;
++}
++
++} // namespace
++
++// ----- CDPHandler::Impl ------------------------------------------------------
++
++class CDPHandler::Impl {
++ public:
++  std::unique_ptr<RuntimeAdapter> adapter;
++  std::string title;
++  std::shared_ptr<State> initialState;
++  CDPHandlerSessionConfig sessionConfig;
++  std::optional<CDPHandlerExecutionContextDescription> ecDesc;
++  bool waitForDebugger{false};
++
++  // Constructed lazily in registerCallbacks (we need the message callback
++  // to build the CDPAgent), torn down in unregisterCallbacks/dtor.
++  std::unique_ptr<facebook::hermes::cdp::CDPAgent> agent;
++  bool didAcquireDebugAPI{false};
++  OnUnregisterFunction onUnregister;
++
++  ~Impl() {
++    if (agent) {
++      agent.reset();
++    }
++    if (didAcquireDebugAPI && adapter) {
++      registry().release(adapter->getRuntime());
++    }
++  }
++};
++
++// ----- CDPHandler ------------------------------------------------------------
++
++CDPHandler::CDPHandler() : impl_(std::make_unique<Impl>()) {}
++
++CDPHandler::~CDPHandler() = default;
++
++std::shared_ptr<CDPHandler> CDPHandler::create(
++    std::unique_ptr<RuntimeAdapter> adapter,
++    bool waitForDebugger,
++    bool /*processConsoleAPI*/,
++    std::shared_ptr<State> state,
++    const CDPHandlerSessionConfig& sessionConfig,
++    std::optional<CDPHandlerExecutionContextDescription> ec) {
++  auto handler = std::shared_ptr<CDPHandler>(new CDPHandler());
++  handler->impl_->adapter = std::move(adapter);
++  handler->impl_->initialState = std::move(state);
++  handler->impl_->sessionConfig = sessionConfig;
++  handler->impl_->ecDesc = std::move(ec);
++  handler->impl_->waitForDebugger = waitForDebugger;
++  return handler;
++}
++
++std::shared_ptr<CDPHandler> CDPHandler::create(
++    std::unique_ptr<RuntimeAdapter> adapter,
++    const std::string& title,
++    bool waitForDebugger,
++    bool processConsoleAPI,
++    std::shared_ptr<State> state,
++    const CDPHandlerSessionConfig& sessionConfig,
++    std::optional<CDPHandlerExecutionContextDescription> ec) {
++  auto handler = create(
++      std::move(adapter),
++      waitForDebugger,
++      processConsoleAPI,
++      std::move(state),
++      sessionConfig,
++      std::move(ec));
++  handler->impl_->title = title;
++  return handler;
++}
++
++std::string CDPHandler::getTitle() const {
++  return impl_->title;
++}
++
++bool CDPHandler::registerCallbacks(
++    CDPMessageCallbackFunction messageCallback,
++    OnUnregisterFunction onUnregister) {
++  if (impl_->agent) {
++    // Old API contract: only one connection at a time.
++    return false;
++  }
++
++  HermesRuntime& runtime = impl_->adapter->getRuntime();
++  auto& debugAPI = registry().acquire(runtime);
++  impl_->didAcquireDebugAPI = true;
++
++  // Bind the V1 EnqueueRuntimeTaskFunc to the adapter's runtime-thread
++  // task queue. Capturing a raw pointer to the adapter is safe for the
++  // CDPAgent's lifetime: the agent is destroyed (via unregisterCallbacks
++  // or ~Impl) before the adapter unique_ptr is.
++  RuntimeAdapter* adapterPtr = impl_->adapter.get();
++  facebook::hermes::debugger::EnqueueRuntimeTaskFunc enqueue =
++      [adapterPtr](facebook::hermes::debugger::RuntimeTask task) {
++        adapterPtr->enqueueRuntimeTask(std::move(task));
++      };
++
++  int32_t executionContextID =
++      impl_->ecDesc ? impl_->ecDesc->id : /*default*/ 1;
++
++  impl_->agent = facebook::hermes::cdp::CDPAgent::create(
++      executionContextID,
++      debugAPI,
++      std::move(enqueue),
++      std::move(messageCallback));
++
++  // Old API auto-enabled the Debugger domain on construction; mirror that
++  // so set-and-forget breakpoint registration works without a prior
++  // explicit `Debugger.enable` from the front-end.
++  impl_->agent->enableDebuggerDomain();
++  if (impl_->sessionConfig.isRuntimeDomainEnabled) {
++    impl_->agent->enableRuntimeDomain();
++  }
++
++  impl_->onUnregister = std::move(onUnregister);
++  return true;
++}
++
++bool CDPHandler::unregisterCallbacks() {
++  if (!impl_->agent) {
++    return false;
++  }
++  impl_->agent.reset();
++  if (impl_->didAcquireDebugAPI) {
++    registry().release(impl_->adapter->getRuntime());
++    impl_->didAcquireDebugAPI = false;
++  }
++  auto cb = std::move(impl_->onUnregister);
++  impl_->onUnregister = nullptr;
++  if (cb) {
++    cb();
++  }
++  return true;
++}
++
++void CDPHandler::handle(std::string message) {
++  if (impl_->agent) {
++    impl_->agent->handleCommand(std::move(message));
++  }
++}
++
++std::unique_ptr<State> CDPHandler::getState() {
++  // MVP: we don't translate V1 cdp::State across the shim boundary.
++  // Returning nullptr means breakpoints are lost on reload, which is
++  // documented as a known limitation in CDP_ADAPTER_PLAN.md (open
++  // question 4 / risk 3).
++  return nullptr;
++}
++
++} // namespace chrome
++} // namespace inspector_modern
++} // namespace hermes
++} // namespace facebook
 --- a/ReactCommon/hermes/executor/HermesExecutorFactory.cpp
 +++ b/ReactCommon/hermes/executor/HermesExecutorFactory.cpp
 @@ -55,6 +55,23 @@
