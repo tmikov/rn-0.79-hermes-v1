@@ -115,10 +115,14 @@ rm -rf "$TMP"
 
 ## What's *not* in the patches
 
-The patches only cover `node_modules/react-native/`. Two changes live
-elsewhere and have to be applied separately:
+The patches only cover `node_modules/react-native/`. The other changes
+live outside that tree and have to be applied separately:
 
 - `sample79/android/settings.gradle` — the `dependencySubstitution` block
-  (covered in README §6b). This is in the app, not RN.
+  (covered in README §6b). In the app, not RN.
+- `sample79/android/app/build.gradle` — `hermesCommand` for release
+  builds (covered in README §7b). In the app, not RN.
+- `sample79/package.json` — `hermes-compiler` devDependency for the V1
+  hermesc (covered in README §7a). In the app, not RN.
 - The `sdkmanager` stub at `$ANDROID_HOME/cmdline-tools/latest/bin/`
   (covered in README §5b). Filesystem-level, not in any source tree.

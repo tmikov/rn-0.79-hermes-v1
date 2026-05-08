@@ -85,5 +85,8 @@ APK.
    (`HermesRuntime`, `DebuggerAPI`, `CDPAgent`, etc.) — header names look
    the same but the contents may have shifted between RN 0.79's pinned
    Hermes (`hermes-2025-06-04-RNv0.79.3-7f9a871e...`) and `static_h`.
-5. hermesc: not needed for debug/Metro. Required for release; V1
-   prebuilts include it somewhere we haven't confirmed.
+5. hermesc: not needed for debug/Metro. For release, install the
+   `hermes-compiler` npm package (versioned in lockstep with
+   `hermes-android`, e.g. `250829098.0.13`) and point RN's gradle
+   plugin at it via `react.hermesCommand` in `app/build.gradle`. RN
+   0.79's bundled hermesc emits HBC v96; V1 needs v98.

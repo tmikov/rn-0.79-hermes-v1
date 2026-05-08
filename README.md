@@ -475,6 +475,83 @@ unzip -l sample79/android/app/build/outputs/apk/debug/app-debug.apk \
 # NO libhermes.so
 ```
 
+## 7. Release build on Hermes V1
+
+Debug builds get JS from Metro at runtime, so the bytecode compiler
+(`hermesc`) isn't on the path. Release builds inline a precompiled HBC
+(Hermes Bytecode) bundle into the APK, so they need a `hermesc` whose
+**bytecode version** matches the runtime.
+
+- RN 0.79's bundled hermesc (`node_modules/react-native/sdks/hermesc/...`)
+  emits **HBC v96** — Hermes V1 (`libhermesvm.so`) requires **HBC v98** and
+  refuses anything older.
+- The V1 AAR ships **no host binaries**.
+- The matching host hermesc lives in the `hermes-compiler` npm package,
+  versioned in lockstep with `hermes-android`.
+
+### 7a. Install V1 hermesc
+
+```bash
+cd sample79
+npm install hermes-compiler@250829098.0.13 --save-dev
+```
+
+Resulting binary (macOS): `node_modules/hermes-compiler/hermesc/osx-bin/hermesc`.
+Sanity-check the bytecode version (look for `HBC bytecode version: 98`):
+
+```bash
+node_modules/hermes-compiler/hermesc/osx-bin/hermesc -version
+```
+
+### 7b. Point RN's gradle plugin at V1 hermesc
+
+In `sample79/android/app/build.gradle`, set `hermesCommand` inside the
+`react {}` block (the `%OS-BIN%` token is substituted by RN's gradle
+plugin to the host-OS bin dir):
+
+```diff
+     /* Hermes Commands */
+     //   The hermes compiler command to run. By default it is 'hermesc'
+     // hermesCommand = "$rootDir/my-custom-hermesc/bin/hermesc"
++    hermesCommand = file("../../node_modules/hermes-compiler/hermesc/%OS-BIN%/hermesc").absolutePath
+```
+
+### 7c. Build, install, run
+
+```bash
+cd sample79/android
+./gradlew --no-daemon assembleRelease
+```
+
+Output APK (~50 MB, signed with the bundled debug keystore — fine for
+local testing, replace for production):
+
+```
+sample79/android/app/build/outputs/apk/release/app-release.apk
+```
+
+Install. Note: signed with a different keystore than any leftover debug
+install, so uninstall first:
+
+```bash
+adb uninstall com.sample79
+adb install sample79/android/app/build/outputs/apk/release/app-release.apk
+adb shell am start -n com.sample79/.MainActivity
+```
+
+No Metro needed — the JS bundle is in the APK at
+`assets/index.android.bundle`. Verify it's V1 bytecode (byte 8 of an HBC
+file is the bytecode version, little-endian):
+
+```bash
+unzip -p sample79/android/app/build/outputs/apk/release/app-release.apk \
+  assets/index.android.bundle | xxd -l 16
+# expect byte 8 == 62 (hex) == 98 (decimal) = HBC v98
+```
+
+Watch logcat for `ReactNativeJS: Running "sample79"` to confirm V1
+executed the bundle.
+
 ## Status
 
 - [x] Project bootstrapped (RN 0.79.5)
@@ -482,4 +559,5 @@ unzip -l sample79/android/app/build/outputs/apk/debug/app-debug.apk \
 - [x] App runs on emulator against Metro
 - [x] RN + Hermes built from source via `includeBuild`
 - [x] Hermes V1 swapped in (`com.facebook.hermes:hermes-android`); JS runs on V1
+- [x] Release APK builds and runs on V1 (V1 hermesc from `hermes-compiler` npm package)
 - [ ] Restore Chrome devtools / sampling profiler / fatal handler against V1 APIs
