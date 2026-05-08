@@ -104,3 +104,53 @@
 +} // namespace inspector_modern
 +} // namespace hermes
 +} // namespace facebook
+--- a/ReactCommon/hermes/executor/HermesExecutorFactory.cpp
++++ b/ReactCommon/hermes/executor/HermesExecutorFactory.cpp
+@@ -55,6 +55,23 @@
+         });
+   }
+ 
++  // Required by the Hermes V1 CDP back-end via the inspector adapter.
++  // Tasks must run with exclusive access to the runtime — MessageQueueThread
++  // serialises callbacks with JS execution, so posting via runOnQueue gives
++  // the V1 "between JS evaluations" semantic the CDP agent relies on.
++  void enqueueRuntimeTask(
++      std::function<void(HermesRuntime&)> task) override {
++    thread_->runOnQueue(
++        [weakRuntime = std::weak_ptr<HermesRuntime>(runtime_),
++         task = std::move(task)]() {
++          auto runtime = weakRuntime.lock();
++          if (!runtime) {
++            return;
++          }
++          task(*runtime);
++        });
++  }
++
+  private:
+   std::shared_ptr<HermesRuntime> runtime_;
+ 
+--- a/ReactCommon/react/runtime/hermes/HermesInstance.cpp
++++ b/ReactCommon/react/runtime/hermes/HermesInstance.cpp
+@@ -63,6 +63,21 @@
+     });
+   }
+ 
++  // Required by the Hermes V1 CDP back-end via the inspector adapter.
++  // See HermesExecutorRuntimeAdapter::enqueueRuntimeTask for rationale.
++  void enqueueRuntimeTask(
++      std::function<void(HermesRuntime&)> task) override {
++    std::weak_ptr<HermesRuntime> weakRuntime(hermesRuntime_);
++    messageQueueThread_->runOnQueue(
++        [weakRuntime, task = std::move(task)]() {
++          auto runtime = weakRuntime.lock();
++          if (!runtime) {
++            return;
++          }
++          task(*runtime);
++        });
++  }
++
+  private:
+   std::shared_ptr<HermesRuntime> hermesRuntime_;
+   std::shared_ptr<MessageQueueThread> messageQueueThread_;
