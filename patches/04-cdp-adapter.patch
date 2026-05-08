@@ -104,6 +104,131 @@
 +} // namespace inspector_modern
 +} // namespace hermes
 +} // namespace facebook
+--- a/ReactCommon/hermes/inspector/chrome/CDPHandler.h
++++ b/ReactCommon/hermes/inspector/chrome/CDPHandler.h
+@@ -0,0 +1,122 @@
++/*
++ * Copyright (c) Meta Platforms, Inc. and affiliates.
++ *
++ * This source code is licensed under the MIT license found in the
++ * LICENSE file in the root directory of this source tree.
++ *
++ * Hermes V1 CDP adapter shim. Re-exposes the old
++ * hermes/inspector/chrome/CDPHandler API by delegating to V1's
++ * hermes/cdp/CDPAgent. RN 0.79's inspector-modern code (which still
++ * includes <hermes/inspector/chrome/CDPHandler.h>) compiles unchanged.
++ */
++
++#pragma once
++
++#include <cstdint>
++#include <functional>
++#include <memory>
++#include <optional>
++#include <string>
++
++#include <hermes/inspector/RuntimeAdapter.h>
++
++#ifndef INSPECTOR_EXPORT
++#define INSPECTOR_EXPORT __attribute__((visibility("default")))
++#endif
++
++namespace facebook {
++namespace hermes {
++namespace inspector_modern {
++namespace chrome {
++
++using CDPMessageCallbackFunction = std::function<void(const std::string&)>;
++using OnUnregisterFunction = std::function<void()>;
++
++struct CDPHandlerSessionConfig {
++  bool isRuntimeDomainEnabled{false};
++};
++
++struct CDPHandlerExecutionContextDescription {
++  int32_t id{1};
++  std::string origin;
++  std::string name;
++  std::optional<std::string> auxData;
++  bool shouldSendNotifications{false};
++};
++
++/// Opaque persisted state. Old API exposed this so the integrator could
++/// preserve breakpoints across reloads. We don't try to translate V1's
++/// internal cdp::State across the boundary in MVP — getState returns
++/// nullptr and any incoming state is ignored. A future change can wire
++/// this through if reload-state preservation matters.
++class INSPECTOR_EXPORT State {
++ public:
++  struct Private;
++  explicit State(std::unique_ptr<Private> privateState);
++  ~State();
++  Private& get();
++
++ private:
++  std::unique_ptr<Private> privateState_;
++};
++
++/// CDP front-end shim. Implementation lives in CDPHandler.cpp and
++/// translates calls to the V1 hermes::cdp::CDPAgent.
++class INSPECTOR_EXPORT CDPHandler {
++ public:
++  /// Old API's full create overload. RN 0.79 doesn't call this, but it's
++  /// kept for source-compatibility with anyone else who might.
++  static std::shared_ptr<CDPHandler> create(
++      std::unique_ptr<RuntimeAdapter> adapter,
++      bool waitForDebugger = false,
++      bool processConsoleAPI = true,
++      std::shared_ptr<State> state = nullptr,
++      const CDPHandlerSessionConfig& sessionConfig = {},
++      std::optional<CDPHandlerExecutionContextDescription> ec = std::nullopt);
++
++  /// Deprecated overload accepting a debug-session title. This is the
++  /// one RN's ConnectionDemux::enableDebugging actually calls.
++  static std::shared_ptr<CDPHandler> create(
++      std::unique_ptr<RuntimeAdapter> adapter,
++      const std::string& title,
++      bool waitForDebugger = false,
++      bool processConsoleAPI = true,
++      std::shared_ptr<State> state = nullptr,
++      const CDPHandlerSessionConfig& sessionConfig = {},
++      std::optional<CDPHandlerExecutionContextDescription> ec = std::nullopt);
++
++  ~CDPHandler();
++
++  CDPHandler(const CDPHandler&) = delete;
++  CDPHandler& operator=(const CDPHandler&) = delete;
++
++  std::string getTitle() const;
++
++  /// Lazy two-stage construction: registerCallbacks creates the V1
++  /// CDPAgent (which needs the message callback we're given here).
++  /// Returns false if callbacks are already registered.
++  bool registerCallbacks(
++      CDPMessageCallbackFunction messageCallback,
++      OnUnregisterFunction onUnregister);
++
++  /// Tear down the V1 CDPAgent and invoke the OnUnregister callback.
++  /// Returns false if no callbacks were registered.
++  bool unregisterCallbacks();
++
++  /// Forwards a CDP JSON command to the V1 CDPAgent. No-op if no
++  /// callbacks are registered.
++  void handle(std::string message);
++
++  /// Extract V1 cdp::State for reload preservation. MVP: returns nullptr.
++  std::unique_ptr<State> getState();
++
++ private:
++  class Impl;
++  CDPHandler();
++  std::unique_ptr<Impl> impl_;
++};
++
++} // namespace chrome
++} // namespace inspector_modern
++} // namespace hermes
++} // namespace facebook
 --- a/ReactCommon/hermes/executor/HermesExecutorFactory.cpp
 +++ b/ReactCommon/hermes/executor/HermesExecutorFactory.cpp
 @@ -55,6 +55,23 @@
