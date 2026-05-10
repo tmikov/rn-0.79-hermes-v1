@@ -97,14 +97,25 @@ The remaining commands assume `cd sample79` as the starting point.
 ### Apply all six patches (one-time)
 
 ```bash
-# Four RN-side patches (under node_modules/react-native/):
+../scripts/apply-patches.sh
+```
+
+`scripts/apply-patches.sh` applies all six in canonical order (four
+RN-side under `node_modules/react-native/`; two app-side under
+`sample79/`) and writes a marker file at
+`sample79/node_modules/react-native/.directtv-v1-patches-applied`.
+Re-running the script is a no-op while the marker is present;
+delete the marker to force re-application (or just `rm -rf
+node_modules && npm install` and re-run).
+
+If you'd rather apply by hand, the equivalent commands are:
+
+```bash
 ( cd node_modules/react-native && \
   patch -p1 -i ../../../patches/01-jsi-vendoring.patch && \
   patch -p1 -i ../../../patches/02-rn-surgery.patch && \
   patch -p1 -i ../../../patches/04-cdp-adapter.patch && \
   patch -p1 -i ../../../patches/05-ios.patch )
-
-# Two app-side patches (under sample79/):
 patch -p1 -i ../patches/03-app-side.patch
 patch -p1 -i ../patches/06-ios-app-side.patch
 ```
@@ -184,13 +195,10 @@ Pre-vendor the V1 iOS tarballs under `vendor/hermes-ios/` at the repo
 root, sibling of `sample79/` (rationale in §8b):
 
 ```bash
-mkdir -p ../vendor/hermes-ios && cd ../vendor/hermes-ios
-curl -fLo hermes-ios-250829098.0.13-debug.tar.gz \
-  https://repo1.maven.org/maven2/com/facebook/hermes/hermes-ios/250829098.0.13/hermes-ios-250829098.0.13-hermes-ios-debug.tar.gz
-curl -fLo hermes-ios-250829098.0.13-release.tar.gz \
-  https://repo1.maven.org/maven2/com/facebook/hermes/hermes-ios/250829098.0.13/hermes-ios-250829098.0.13-hermes-ios-release.tar.gz
-cd /path/to/sample79
+../scripts/vendor-hermes-ios.sh
 ```
+
+(Idempotent: skips files that are already present.)
 
 ### iOS — Debug app (iOS Simulator, Metro serves the JS)
 

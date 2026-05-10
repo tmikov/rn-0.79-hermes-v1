@@ -262,6 +262,20 @@ git diff -- sample79/ios/Podfile \
 
 (Or `sl diff sample79/ios/Podfile --reason "..."` if you're on Sapling.)
 
+## Keeping `scripts/apply-patches.sh` in sync
+
+`scripts/apply-patches.sh` hard-codes the canonical patch list and
+apply order (`01 → 02 → 04 → 05` RN-side, `03 → 06` app-side). If
+you add, rename, reorder, or split a patch, also update the script
+or the README's fast path will silently miss the new patch.
+
+The script writes a marker file
+`sample79/node_modules/react-native/.directtv-v1-patches-applied`
+recording sha256 of every applied patch. On idempotent re-runs the
+marker is what's checked, **not** the patch content — so updating a
+patch in place won't trigger re-application; users must `rm` the
+marker (or wipe `node_modules`) to pick up the new patch content.
+
 ## What's *not* in the patches
 
 - `sample79/package.json` / `package-lock.json` — `hermes-compiler`
