@@ -1,10 +1,11 @@
 # Regenerating the patches
 
-There are four patches:
+There are six patches:
 
 - `01-jsi-vendoring.patch` and `02-rn-surgery.patch` describe the diff
   between **pristine RN 0.79.5 from npm** and our **modified
-  `node_modules/react-native/`** in `sample79/`. Regenerate when:
+  `node_modules/react-native/`** in `sample79/`. Patch 02 is
+  Android-build-system specific (Gradle/CMake). Regenerate when:
   - you bump the Hermes V1 AAR version (must re-vendor JSI from the
     matching `hermes-v<aar-version>` tag — see "JSI tag pinning" below);
   - you re-vendor JSI for any other reason;
@@ -22,6 +23,20 @@ There are four patches:
   with `patch -p1` cleanly after 01 and 02 (and undoes some of patch
   02's `HERMES_ENABLE_DEBUGGER` removals where the shim now provides
   a working back-end). See "Regenerating patch 04" below.
+- `05-ios.patch` is the iOS-build-system analog of patch 02:
+  CocoaPods/Podspec edits that wire RN 0.79's iOS build to consume
+  V1 from the `com.facebook.hermes:hermes-ios` Maven artifact, glob
+  the patch-04 shim files into `React-hermes`, and include a workaround
+  for fmt 11.0.2 + clang 19+ (Xcode 26+). Diffs straight against
+  pristine RN 0.79.5 — no layering. Required only for iOS builds.
+  See "Regenerating patch 05" below.
+- `06-ios-app-side.patch` is the iOS analog of patch 03: app-side
+  CocoaPods Podfile edits in `sample79/ios/`. Adds a `post_install`
+  hook that re-applies a one-line patch to `Pods/fmt/include/fmt/base.h`
+  after each `pod install` (CocoaPods makes pod files read-only and
+  re-extracts on install, so the in-tree fmt fix from patch 05 alone
+  isn't enough). Required only for iOS builds. See "Regenerating
+  patch 06" below.
 
 ## JSI tag pinning
 
@@ -122,7 +137,8 @@ modified tree exactly:
 TMP=$(mktemp -d) && cp -R "$PRISTINE" "$TMP/rn"
 ( cd "$TMP/rn" && patch -p1 -i "$PATCHDIR/01-jsi-vendoring.patch" \
                 && patch -p1 -i "$PATCHDIR/02-rn-surgery.patch" \
-                && patch -p1 -i "$PATCHDIR/04-cdp-adapter.patch" )
+                && patch -p1 -i "$PATCHDIR/04-cdp-adapter.patch" \
+                && patch -p1 -i "$PATCHDIR/05-ios.patch" )
 diff -ruN -x .gradle -x sdks -x .cxx -x build -x node_modules \
   "$TMP/rn" "$MODIFIED" | wc -l    # must be 0
 rm -rf "$TMP"
@@ -199,11 +215,68 @@ The `sed` strips the `sample79/` prefix from the diff headers so the
 patch applies with `patch -p1` from inside `sample79/` (matching how the
 README §6 Option A invokes it).
 
+## Regenerating patch 05
+
+Patch 05 covers four files in `node_modules/react-native/`. Same pattern
+as patches 01/02 — diff against pristine RN 0.79.5:
+
+```bash
+PRISTINE="/tmp/pristine-rn79/package"
+MODIFIED="/path/to/sample79/node_modules/react-native"
+PATCHDIR="/path/to/this/patches"
+
+IOS_FILES="
+sdks/hermes-engine/hermes-engine.podspec
+sdks/hermes-engine/hermes-utils.rb
+ReactCommon/hermes/React-hermes.podspec
+third-party-podspecs/fmt.podspec
+"
+
+emit() {
+  local rel="$1"
+  local old="$PRISTINE/$rel"
+  [ -f "$old" ] || old="/dev/null"
+  diff -uN --label "a/$rel" --label "b/$rel" "$old" "$MODIFIED/$rel" || true
+}
+
+> "$PATCHDIR/05-ios.patch"
+for rel in $IOS_FILES; do
+  emit "$rel" >> "$PATCHDIR/05-ios.patch"
+done
+```
+
+Patch 05 does not layer on patches 02 or 04 — it touches an entirely
+disjoint set of files (CocoaPods podspecs vs Gradle/CMake), so it
+diffs straight against pristine.
+
+## Regenerating patch 06
+
+Patch 06 covers `sample79/ios/Podfile`. Same pattern as patch 03:
+
+```bash
+cd /path/to/directtv
+git diff -- sample79/ios/Podfile \
+  | sed 's|sample79/||g' \
+  > patches/06-ios-app-side.patch
+```
+
+(Or `sl diff sample79/ios/Podfile --reason "..."` if you're on Sapling.)
+
 ## What's *not* in the patches
 
 - `sample79/package.json` / `package-lock.json` — `hermes-compiler`
-  devDependency for the V1 hermesc (covered in README §7a). It's an
-  `npm install` step, not a source edit; patches don't compose well with
-  npm lockfiles.
+  devDependency for the V1 host hermesc on Android (covered in README
+  §7a). It's an `npm install` step, not a source edit; patches don't
+  compose well with npm lockfiles. iOS doesn't need this — the V1 iOS
+  tarball ships its own host `hermesc` at `destroot/bin/hermesc` and
+  RN's `react-native-xcode.sh` finds it there by default.
 - The `sdkmanager` stub at `$ANDROID_HOME/cmdline-tools/latest/bin/`
   (covered in README §5b). Filesystem-level, not in any source tree.
+- The vendored V1 iOS tarballs under `vendor/hermes-ios/`. Binary
+  blobs, not source edits; download with `curl` (URLs in
+  `IOS_V1_PLAN.md`). Selected at `pod install` time via
+  `HERMES_ENGINE_TARBALL_PATH=...`.
+- Incidental edits to `sample79/ios/sample79.xcodeproj/project.pbxproj`
+  that CocoaPods makes on `pod install` (privacy manifest aggregation,
+  removing stale test target placeholders). These happen on any RN
+  0.79 + Xcode 26 + `pod install`, independent of our V1 work.

@@ -1,0 +1,114 @@
+--- a/sdks/hermes-engine/hermes-engine.podspec
++++ b/sdks/hermes-engine/hermes-engine.podspec
+@@ -20,7 +20,10 @@
+ 
+ # package.json
+ package = JSON.parse(File.read(File.join(react_native_path, "package.json")))
+-version = package['version']
++# Hermes V1 swap: pin to the V1 Maven artifact version (matches the Android
++# com.facebook.hermes:hermes-android coord). Decouples Hermes-engine version
++# from RN package version, since V1 follows the YYMMDDxxx.0.N scheme.
++version = "250829098.0.13"
+ 
+ source_type = hermes_source_type(version, react_native_path)
+ source = podspec_source(source_type, version, react_native_path)
+@@ -45,21 +48,28 @@
+                     "GCC_WARN_INHIBIT_ALL_WARNINGS" => "YES" # Disable warnings because we don't control this library
+                   }
+ 
+-  spec.ios.vendored_frameworks = "destroot/Library/Frameworks/ios/hermes.framework"
+-  spec.tvos.vendored_frameworks = "destroot/Library/Frameworks/tvos/hermes.framework"
+-  spec.osx.vendored_frameworks = "destroot/Library/Frameworks/macosx/hermes.framework"
+-  spec.visionos.vendored_frameworks = "destroot/Library/Frameworks/xros/hermes.framework"
++  # Hermes V1 renamed the framework: hermes.framework -> hermesvm.framework
++  # (matches the Android libhermes.so -> libhermesvm.so rename).
++  spec.ios.vendored_frameworks = "destroot/Library/Frameworks/ios/hermesvm.framework"
++  spec.tvos.vendored_frameworks = "destroot/Library/Frameworks/tvos/hermesvm.framework"
++  spec.osx.vendored_frameworks = "destroot/Library/Frameworks/macosx/hermesvm.framework"
++  spec.visionos.vendored_frameworks = "destroot/Library/Frameworks/xros/hermesvm.framework"
+ 
+   if HermesEngineSourceType::isPrebuilt(source_type) then
+ 
+     spec.subspec 'Pre-built' do |ss|
+       ss.preserve_paths = ["destroot/bin/*"].concat(["**/*.{h,c,cpp}"])
+-      ss.source_files = "destroot/include/hermes/**/*.h"
++      # Pull in Hermes public headers, plus the V1-only jsi/hermes-interfaces.h
++      # which the hermes/hermes.h umbrella now #includes (RN's vendored JSI
++      # tree at ReactCommon/jsi/jsi/ also has a copy via patch 01, so this
++      # is just to give the umbrella an unambiguous resolution within the
++      # pod's own include tree).
++      ss.source_files = ["destroot/include/hermes/**/*.h", "destroot/include/jsi/hermes-interfaces.h"]
+       ss.header_mappings_dir = "destroot/include"
+-      ss.ios.vendored_frameworks = "destroot/Library/Frameworks/universal/hermes.xcframework"
+-      ss.visionos.vendored_frameworks = "destroot/Library/Frameworks/universal/hermes.xcframework"
+-      ss.tvos.vendored_frameworks = "destroot/Library/Frameworks/universal/hermes.xcframework"
+-      ss.osx.vendored_frameworks = "destroot/Library/Frameworks/macosx/hermes.framework"
++      ss.ios.vendored_frameworks = "destroot/Library/Frameworks/universal/hermesvm.xcframework"
++      ss.visionos.vendored_frameworks = "destroot/Library/Frameworks/universal/hermesvm.xcframework"
++      ss.tvos.vendored_frameworks = "destroot/Library/Frameworks/universal/hermesvm.xcframework"
++      ss.osx.vendored_frameworks = "destroot/Library/Frameworks/macosx/hermesvm.framework"
+     end
+ 
+ 
+--- a/sdks/hermes-engine/hermes-utils.rb
++++ b/sdks/hermes-engine/hermes-utils.rb
+@@ -204,11 +204,14 @@
+ end
+ 
+ def release_tarball_url(version, build_type)
+-    maven_repo_url = "https://repo1.maven.org/maven2"
+-    namespace = "com/facebook/react"
+-    # Sample url from Maven:
+-    # https://repo1.maven.org/maven2/com/facebook/react/react-native-artifacts/0.71.0/react-native-artifacts-0.71.0-hermes-ios-debug.tar.gz
+-    return "#{maven_repo_url}/#{namespace}/react-native-artifacts/#{version}/react-native-artifacts-#{version}-hermes-ios-#{build_type.to_s}.tar.gz"
++    # Hermes V1 swap: V1 publishes to com.facebook.hermes:hermes-ios on
++    # Maven Central (sibling of the Android com.facebook.hermes:hermes-android
++    # artifact). The classifier double-naming hermes-ios-<ver>-hermes-ios-<type>
++    # is real — artifact ID and classifier prefix both happen to be "hermes-ios".
++    # Sample URL:
++    # https://repo1.maven.org/maven2/com/facebook/hermes/hermes-ios/250829098.0.13/hermes-ios-250829098.0.13-hermes-ios-debug.tar.gz
++    return "https://repo1.maven.org/maven2/com/facebook/hermes/hermes-ios/" \
++        "#{version}/hermes-ios-#{version}-hermes-ios-#{build_type.to_s}.tar.gz"
+ end
+ 
+ def download_stable_hermes(react_native_path, version, configuration)
+--- a/ReactCommon/hermes/React-hermes.podspec
++++ b/ReactCommon/hermes/React-hermes.podspec
+@@ -33,13 +33,22 @@
+   s.platforms              = min_supported_versions
+   s.source                 = source
+   s.source_files           = "executor/*.{cpp,h}",
++                             "inspector/*.{cpp,h}",
++                             "inspector/chrome/*.{cpp,h}",
+                              "inspector-modern/chrome/*.{cpp,h}",
+   s.public_header_files    = "executor/HermesExecutorFactory.h"
+   s.compiler_flags         = folly_compiler_flags + ' ' + boost_compiler_flags
++  # Hermes V1 CDP adapter shim (patch 04) lives in inspector/ and
++  # includes <hermes/AsyncDebuggerAPI.h>, which gates the V1 API on
++  # HERMES_ENABLE_DEBUGGER. Define it unconditionally so the shim
++  # compiles in Release as well; the layout of HermesRuntimeTargetDelegate
++  # is pImpl'd to be ABI-stable wrt this define, so downstream pods
++  # need not see it.
+   s.pod_target_xcconfig    = {
+                                "HEADER_SEARCH_PATHS" => "\"${PODS_ROOT}/hermes-engine/destroot/include\" \"$(PODS_TARGET_SRCROOT)/..\" \"$(PODS_ROOT)/boost\" \"$(PODS_ROOT)/RCT-Folly\" \"$(PODS_ROOT)/DoubleConversion\" \"$(PODS_ROOT)/fmt/include\"",
+                                "CLANG_CXX_LANGUAGE_STANDARD" => rct_cxx_language_standard(),
+                                "DEFINES_MODULE" => "YES",
++                               "GCC_PREPROCESSOR_DEFINITIONS" => "$(inherited) HERMES_ENABLE_DEBUGGER=1",
+                              }
+   s.header_dir             = "reacthermes"
+   s.dependency "React-cxxreact", version
+--- a/third-party-podspecs/fmt.podspec
++++ b/third-party-podspecs/fmt.podspec
+@@ -19,7 +19,11 @@
+   }
+   spec.pod_target_xcconfig = {
+     "CLANG_CXX_LANGUAGE_STANDARD" => rct_cxx_language_standard(),
+-    "GCC_WARN_INHIBIT_ALL_WARNINGS" => "YES" # Disable warnings because we don't control this library
++    "GCC_WARN_INHIBIT_ALL_WARNINGS" => "YES", # Disable warnings because we don't control this library
++    # fmt 11.0.2 + clang 19+ (Xcode 26+) trips "call to consteval function
++    # is not a constant expression" in format-inl.h. Disable consteval
++    # path until fmt is bumped to >= 11.1.0.
++    "GCC_PREPROCESSOR_DEFINITIONS" => "$(inherited) FMT_USE_CONSTEVAL=0"
+   }
+   spec.platforms = min_supported_versions
+   spec.libraries = "c++"

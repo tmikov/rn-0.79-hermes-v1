@@ -1,0 +1,4 @@
+# Pre-vendored Hermes V1 iOS tarballs (~50 MB of binary blobs).
+# Fetched via the curl commands in README §8b; URLs and SHA-256 hashes
+# in IOS Maven coords. Not in patches; not committed.
+vendor/

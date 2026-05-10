@@ -1,0 +1,36 @@
+diff --git a/ios/Podfile b/ios/Podfile
+--- a/ios/Podfile
++++ b/ios/Podfile
+@@ -31,5 +31,32 @@
+       :mac_catalyst_enabled => false,
+       # :ccache_enabled => true
+     )
++
++    # fmt 11.0.2 + clang 19+ (Xcode 26+) trips a "call to consteval function
++    # is not a constant expression" error inside fmt's own format-inl.h.
++    # Wrap fmt's FMT_USE_CONSTEVAL detection in #ifndef so our podspec-level
++    # GCC_PREPROCESSOR_DEFINITIONS=FMT_USE_CONSTEVAL=0 actually wins.
++    # CocoaPods re-extracts the pod source on each install, so the patch
++    # has to be re-applied here rather than committed in-tree.
++    fmt_base_h = File.join(installer.sandbox.root, 'fmt/include/fmt/base.h')
++    if File.exist?(fmt_base_h)
++      contents = File.read(fmt_base_h)
++      sentinel = "// Detect consteval, C++20 constexpr extensions and std::is_constant_evaluated."
++      guarded  = "#{sentinel}\n#ifndef FMT_USE_CONSTEVAL"
++      unless contents.include?(guarded)
++        patched = contents.sub(
++          "#{sentinel}\n#if !defined(__cpp_lib_is_constant_evaluated)",
++          "#{guarded}\n#if !defined(__cpp_lib_is_constant_evaluated)"
++        )
++        # Close the new #ifndef just before the next "#if FMT_USE_CONSTEVAL" block.
++        patched = patched.sub(
++          /(#endif\n)(#if FMT_USE_CONSTEVAL\n)/,
++          "\\1#endif // FMT_USE_CONSTEVAL\n\\2"
++        )
++        File.chmod(0644, fmt_base_h)
++        File.write(fmt_base_h, patched)
++        Pod::UI.puts "[fmt] Patched base.h to honour external -DFMT_USE_CONSTEVAL=0".yellow
++      end
++    end
+   end
+ end
