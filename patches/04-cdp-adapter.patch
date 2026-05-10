@@ -1,6 +1,6 @@
 --- a/ReactCommon/hermes/inspector/CMakeLists.txt
 +++ b/ReactCommon/hermes/inspector/CMakeLists.txt
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,42 @@
 +# Copyright (c) Meta Platforms, Inc. and affiliates.
 +#
 +# This source code is licensed under the MIT license found in the
@@ -14,26 +14,35 @@
 +cmake_minimum_required(VERSION 3.13)
 +set(CMAKE_VERBOSE_MAKEFILE on)
 +
-+file(GLOB hermesinspectorshim_SRC CONFIGURE_DEPENDS
-+        RuntimeAdapter.cpp
-+        chrome/*.cpp)
++# The shim references V1 CDP symbols (CDPAgent, CDPDebugAPI, AsyncDebuggerAPI)
++# that the V1 Android AAR's Release-classifier libhermesvm.so strips out
++# (debug ~3.7 MB vs release ~2.5 MB). Building the shim in Release would
++# therefore produce undefined symbols at link time. Gate the entire target
++# on Debug; in Release the shim simply doesn't exist, and every consumer
++# below also wraps its hermes_inspector_shim reference in
++# $<$<CONFIG:Debug>:...>. CDP devtools is a Debug-only feature anyway.
++if(${CMAKE_BUILD_TYPE} MATCHES Debug)
++        file(GLOB hermesinspectorshim_SRC CONFIGURE_DEPENDS
++                RuntimeAdapter.cpp
++                chrome/*.cpp)
 +
-+add_library(hermes_inspector_shim
-+        OBJECT
-+        ${hermesinspectorshim_SRC})
++        add_library(hermes_inspector_shim
++                OBJECT
++                ${hermesinspectorshim_SRC})
 +
-+target_compile_options(
-+        hermes_inspector_shim
-+        PRIVATE
-+        -std=c++20
-+        -fexceptions
-+        -DHERMES_ENABLE_DEBUGGER=1)
++        target_compile_options(
++                hermes_inspector_shim
++                PRIVATE
++                -std=c++20
++                -fexceptions
++                -DHERMES_ENABLE_DEBUGGER=1)
 +
-+target_include_directories(hermes_inspector_shim PUBLIC ${REACT_COMMON_DIR})
-+target_link_libraries(hermes_inspector_shim
-+        hermes-engine::hermesvm
-+        jsi
-+        reactnative)
++        target_include_directories(hermes_inspector_shim PUBLIC ${REACT_COMMON_DIR})
++        target_link_libraries(hermes_inspector_shim
++                hermes-engine::hermesvm
++                jsi
++                reactnative)
++endif()
 --- a/ReactCommon/hermes/inspector/RuntimeAdapter.h
 +++ b/ReactCommon/hermes/inspector/RuntimeAdapter.h
 @@ -0,0 +1,60 @@
@@ -513,7 +522,7 @@
  target_link_libraries(hermes_executor_common
          hermes-engine::hermesvm
          hermes_inspector_modern
-+        hermes_inspector_shim
++        $<$<CONFIG:Debug>:hermes_inspector_shim>
          jsi
          reactnative
  )
@@ -564,7 +573,7 @@
  target_include_directories(hermes_inspector_modern PUBLIC ${REACT_COMMON_DIR})
  target_link_libraries(hermes_inspector_modern
          hermes-engine::hermesvm
-+        hermes_inspector_shim
++        $<$<CONFIG:Debug>:hermes_inspector_shim>
          jsi
          reactnative)
 --- a/ReactCommon/hermes/inspector-modern/chrome/HermesRuntimeTargetDelegate.cpp
@@ -626,7 +635,7 @@
          hermes-engine::hermesvm
          hermes_executor_common
          hermes_inspector_modern
-+        hermes_inspector_shim
++        $<$<CONFIG:Debug>:hermes_inspector_shim>
          jsi
          jsinspector
          reactnative
@@ -685,7 +694,7 @@
    gtest_main
    hermes-engine::hermesvm
    hermes_inspector_modern
-+  hermes_inspector_shim
++  $<$<CONFIG:Debug>:hermes_inspector_shim>
    jserrorhandler
    jsi
    mapbufferjni
@@ -705,7 +714,7 @@
          $<TARGET_OBJECTS:hermes_executor>
          $<TARGET_OBJECTS:hermes_executor_common>
          $<TARGET_OBJECTS:hermes_inspector_modern>
-+        $<TARGET_OBJECTS:hermes_inspector_shim>
++        $<$<CONFIG:Debug>:$<TARGET_OBJECTS:hermes_inspector_shim>>
          $<TARGET_OBJECTS:hermesinstancejni>
          $<TARGET_OBJECTS:jni_lib_merge_glue>
          $<TARGET_OBJECTS:jsijniprofiler>
