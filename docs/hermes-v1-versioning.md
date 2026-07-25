@@ -129,8 +129,8 @@ How React Native's relationship with V1 evolved, release by release:
 |---|---|
 | ≤ 0.81 | No `.hermesv1version` file at all — the file doesn't exist. RN builds the legacy inline `libhermes.so` from `com.facebook.react:hermes-android`. |
 | 0.82 | V1 opt-in, source build only. `.hermesv1version` exists but pins a raw `static_h` commit SHA rather than a released version tag — there's no prebuilt artifact yet, so consuming it means building Hermes from source. |
-| 0.83 | V1 becomes the default *packaging*, with real prebuilt versions (`.hermesv1version` pins an actual `250829098.x` release, e.g. `hermes-v250829098.0.4`). |
-| 0.84 | First release where V1 is both default **and** ships prebuilts as the primary path — the "easy path" this repo's `targets/rn-0.85` worked example exploits. |
+| 0.83 | The standalone `com.facebook.hermes` group becomes the default *packaging*, and `.hermesv1version` pins a real, released `static_h` version (`hermes-v250829098.0.4`) instead of a raw commit SHA — but V1 is not yet the default *engine*: consuming it as the running JS engine is still opt-in, not the out-of-the-box prebuilt path. |
+| 0.84 | First release where V1 is the default **engine** consumed via prebuilts as the primary path — no source build required. This is the "easy path" this repo's `targets/rn-0.85` worked example exploits. |
 | 0.84 – 0.86 | All three releases stay on the `250829098` stable branch, only bumping the patch component (`.0.9` → `.0.10` → `.0.14`). None has moved to `260318099` yet. |
 
 ## Appendix: verification commands
