@@ -18,8 +18,8 @@ V1 `260318099.0.1`:
 
 - `targets/rn-0.86/` (easy path) — Debug and Release both confirmed on the
   Android emulator.
-- `targets/rn-0.79/` (hard path) — Android re-validation at
-  `260318099.0.1` is in progress separately from this document.
+- `targets/rn-0.79/` (hard path) — Android Debug + Release confirmed on the
+  emulator at `260318099.0.1`.
 
 **Target Hermes for iOS is the same `260318099.0.1`**, for consistency
 across both targets and both platforms. This document covers two
@@ -305,7 +305,7 @@ xcodebuild -workspace sample86.xcworkspace -scheme sample86 \
 ```
 
 Expected to be a **clean pure override** — RN 0.86's bundled JSI ABI
-already matches `260318099.0.1` on Android (the `rn086-facts.md` finding:
+already matches `260318099.0.1` on Android (RN 0.86's
 `ReactCommon/jsi/jsi/jsi.h` is byte-identical to
 `hermes-v260318099.0.1`'s `API/jsi/jsi/jsi.h`), and iOS shares the same
 `node_modules/react-native/ReactCommon/jsi/jsi/` tree, so the same "no

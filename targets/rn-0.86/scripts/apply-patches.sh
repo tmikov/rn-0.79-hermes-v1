@@ -4,7 +4,7 @@
 # Idempotent via a marker file: re-running on an already-patched tree
 # is a no-op. To force re-application (e.g., after a `npm install` that
 # rewrote node_modules), delete the marker:
-#     rm sample86/node_modules/react-native/.directtv-v1-patches-applied
+#     rm sample86/node_modules/react-native/.hermes-v1-patches-applied
 # Or just blow away node_modules and reinstall.
 #
 # Run from anywhere; resolves paths relative to its own location.
@@ -15,7 +15,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 PATCHDIR="$REPO_ROOT/patches"
 RN_DIR="$REPO_ROOT/sample86/node_modules/react-native"
-MARKER="$RN_DIR/.directtv-v1-patches-applied"
+MARKER="$RN_DIR/.hermes-v1-patches-applied"
 
 if [ ! -d "$RN_DIR" ]; then
     echo "error: $RN_DIR does not exist." >&2

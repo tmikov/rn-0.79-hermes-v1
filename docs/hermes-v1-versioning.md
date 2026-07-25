@@ -62,8 +62,9 @@ version number. See the appendix for the exact commands.)
 The target version for this repo's worked examples is **`260318099.0.1`**
 — the newest `static_h` stable release, one patch past the branch cut,
 **not yet shipped in any released version of React Native** (as of
-2026-07-25, the newest released RN, 0.86, still ships `250829098.0.14`;
-see "Adoption timeline" below).
+2026-07-25 the newest released RN line, 0.86, still ships the
+`250829098` branch — `250829098.0.14` in 0.86.0, `250829098.0.16` in
+0.86.1 — never `260318099`; see "Adoption timeline" below).
 
 ## How React Native pins V1
 
@@ -139,6 +140,17 @@ How React Native's relationship with V1 evolved, release by release:
 stable sound like a version-number edit and nothing else. Usually it is
 — but there's a ceiling, and it's worth understanding exactly what it's
 made of before you rely on the bump being that simple.
+
+This ceiling is not an accident that will get patched away — but it's
+narrower than "any JSI change." JSI is deliberately built to grow *without*
+breaking its ABI: optional capabilities are added as **optional interfaces**
+you query for at runtime, which leave the core vtable alone. What *does*
+break the ABI is a change to a **primary** interface — `jsi::Runtime`
+itself — such as adding a method to it. Hermes reserves those changes for
+the primary interfaces and makes them deliberately, when the resulting API
+is worth it. So the check below is a standing step whenever you cross a
+Hermes range that might contain such a primary-interface change — not every
+bump, only the ones that do.
 
 The V1 Hermes AAR **ships no JSI at all** — it ships only Hermes headers
 (`prefab/.../include/hermes/`, `hermes_abi/`, `hermes_sandbox/`). On

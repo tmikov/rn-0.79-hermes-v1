@@ -205,7 +205,7 @@ committed copy of those files in this repo's `sample79/` subtree, so a
 plain `git diff` from the parent repo's root produces it directly:
 
 ```bash
-cd /path/to/directtv
+cd /path/to/rn-0.79-hermes-v1
 git diff -- sample79/android/settings.gradle \
             sample79/android/app/build.gradle \
   | sed 's|sample79/||g' \
@@ -255,7 +255,7 @@ diffs straight against pristine.
 Patch 06 covers `sample79/ios/Podfile`. Same pattern as patch 03:
 
 ```bash
-cd /path/to/directtv
+cd /path/to/rn-0.79-hermes-v1
 git diff -- sample79/ios/Podfile \
   | sed 's|sample79/||g' \
   > patches/06-ios-app-side.patch
@@ -271,7 +271,7 @@ you add, rename, reorder, or split a patch, also update the script
 or the README's fast path will silently miss the new patch.
 
 The script writes a marker file
-`sample79/node_modules/react-native/.directtv-v1-patches-applied`
+`sample79/node_modules/react-native/.hermes-v1-patches-applied`
 recording sha256 of every applied patch. On idempotent re-runs the
 marker is what's checked, **not** the patch content — so updating a
 patch in place won't trigger re-application; users must `rm` the

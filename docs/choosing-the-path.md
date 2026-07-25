@@ -32,15 +32,25 @@ cat node_modules/react-native/sdks/.hermesv1version 2>/dev/null || echo "pre-V1 
 | 0.82–0.83, or ≥ 0.84 with an insufficient JSI ABI | V1 opt-in / source-build, or V1-by-default but blocked on JSI | Medium-to-hard — see caveat below | documented, not built |
 | ≤ 0.81 | old inline `libhermes.so` (`com.facebook.react`) | Hard — vendor static_h JSI, CMake `libhermes`→`hermesvm`, swap Maven group, CDP shim | `targets/rn-0.79` |
 
-**"RN ≥ 0.84 = Easy" has a condition attached, not a given.** The V1
-Hermes AAR ships no JSI — on Android, the JSI a Hermes build links
-against comes from *RN's own prebuilt* `libjsi.so`. A pure artifact bump
-only stays easy when that prebuilt already exports every JSI symbol the
-newer Hermes references. If the target Hermes added `jsi::Runtime`
-methods since the JSI your RN bundles, the bump builds fine and then
-fails at `dlopen` time — and fixing it means re-vendoring JSI and
-rebuilding RN's native libs from source, i.e. the hard path's JSI step,
-regardless of how new your RN otherwise is.
+**"RN ≥ 0.84 = Easy" has a condition attached, not a given.** JSI is
+deliberately designed to grow without breaking its ABI: new capabilities
+arrive as **optional interfaces** (queried for at runtime), which leave the
+core vtable untouched. The ABI breaks only when a **primary** interface —
+`jsi::Runtime` itself — is changed, e.g. a method added directly to it.
+Hermes reserves that for the primary interfaces and does it deliberately,
+when the resulting API is worth the break. So whether a given upgrade is
+trivial comes down to whether such a *primary-interface* change landed in
+the range you're crossing — not to whether JSI changed at all.
+
+Why that gates the bump: the V1 Hermes AAR ships no JSI — on Android, the
+JSI a Hermes build links against comes from *RN's own prebuilt*
+`libjsi.so`. A pure artifact bump only stays easy when that prebuilt
+already exports every JSI symbol the newer Hermes references. If the target
+Hermes added `jsi::Runtime` methods since the JSI your RN bundles, the bump
+builds fine and then fails at `dlopen` time — and fixing it means
+re-vendoring JSI and rebuilding RN's native libs from source, i.e. the hard
+path's JSI step, regardless of how new your RN otherwise is. Upgrades that
+*don't* cross such an addition stay trivial — a pure version bump.
 
 **The concrete check, before you bump:** diff your RN checkout's bundled
 
@@ -72,6 +82,11 @@ hits this wall; RN 0.86 doesn't. Full story in
   source-building it, opting into it explicitly, or re-vendoring JSI
   rather than getting a clean prebuilt bump. Expect a mix of the "easy"
   override and a slice of the "hard" path's JSI-vendoring concerns.
+  **RN 0.84 and 0.85 are the common instance:** both pin a JSI just before
+  `isTypedArray`, so the current `260318099.0.1` target is ABI-blocked for
+  them (they'd need the JSI-rebuild). Those instructions aren't written up
+  yet — if you want 0.84 or 0.85 on this target, open an issue and they can
+  be added.
 - **Hard** (RN ≤ 0.81): go to [`targets/rn-0.79/`](../targets/rn-0.79/) —
   this is the full surgery: vendoring JSI, retargeting CMake, swapping the
   Maven group, and (if you need Chrome DevTools) the

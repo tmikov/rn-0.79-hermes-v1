@@ -33,6 +33,10 @@ trap of confusing that file with the unrelated legacy `.hermesversion` pin.
   checkout into easy/medium/hard.
 - `docs/cdp-adapter.md` — design notes for the CDP (Chrome DevTools) shim
   used by the hard path.
+- `docs/ios-handoff.md` — the Mac-side runbook for iOS bring-up on
+  `260318099.0.1` (both targets). Not linked from the reader-facing
+  READMEs on purpose: it's a maintainer to-do, not user documentation.
+  Whoever picks up the iOS work starts here.
 - Root `README.md` — short landing page; this file is deeper project
   context, scoped mostly to the hard path (`rn-0.79`) below.
 

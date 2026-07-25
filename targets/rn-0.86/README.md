@@ -41,7 +41,7 @@ The one-line edit is captured as
 applied by [`scripts/apply-patches.sh`](scripts/apply-patches.sh) — the
 same marker-gated, idempotent pattern `targets/rn-0.79` uses. Re-running
 the script after it's already applied is a no-op; delete
-`sample86/node_modules/react-native/.directtv-v1-patches-applied` (or
+`sample86/node_modules/react-native/.hermes-v1-patches-applied` (or
 just `rm -rf node_modules && npm install`) to force re-application.
 
 ## Prerequisites
@@ -234,6 +234,5 @@ documented as its own subsection.
 
 ## iOS
 
-Not built or tested here (this repo's build/test loop runs on Linux,
-which can't build iOS). Deferred to
-[`docs/ios-handoff.md`](../../docs/ios-handoff.md).
+Not built or tested here — this work ran on a Linux server, and iOS builds
+only on a Mac. iOS bring-up for this target is sketched but unvalidated.

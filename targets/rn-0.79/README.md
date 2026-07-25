@@ -103,7 +103,7 @@ The remaining commands assume `cd sample79` as the starting point.
 `scripts/apply-patches.sh` applies all six in canonical order (four
 RN-side under `node_modules/react-native/`; two app-side under
 `sample79/`) and writes a marker file at
-`sample79/node_modules/react-native/.directtv-v1-patches-applied`.
+`sample79/node_modules/react-native/.hermes-v1-patches-applied`.
 Re-running the script is a no-op while the marker is present;
 delete the marker to force re-application (or just `rm -rf
 node_modules && npm install` and re-run).
@@ -426,8 +426,7 @@ consumes the same V1 Maven artifacts).
 > between the two stables (no re-vendor needed); (2) for **release** (§7),
 > use `hermes-compiler@260318099.0.1`, which emits **HBC v99**
 > (byte 8 = `0x63`), not the v98 the older text mentions. iOS (§8–§9)
-> re-validation to `260318099.0.1` is Mac-only — see
-> [`docs/ios-handoff.md`](../../docs/ios-handoff.md).
+> re-validation to `260318099.0.1` is Mac-only and not done here.
 
 Quick recap of the deltas:
 
@@ -1015,7 +1014,7 @@ double-naming (artifact ID and classifier prefix happen to both be
 `hermes-ios`) that's ugly to type later:
 
 ```bash
-cd /path/to/directtv                    # repo root
+cd /path/to/rn-0.79-hermes-v1                    # repo root
 mkdir -p vendor/hermes-ios && cd vendor/hermes-ios
 curl -fLo hermes-ios-250829098.0.13-debug.tar.gz \
   https://repo1.maven.org/maven2/com/facebook/hermes/hermes-ios/250829098.0.13/hermes-ios-250829098.0.13-hermes-ios-debug.tar.gz
@@ -1229,6 +1228,5 @@ iOS:
 - [x] Patch 04's CDP shim compiles into `libReact-hermes.a` on iOS too, but Chrome devtools end-to-end on iOS hasn't been smoke-tested yet (Android-side smoke covers the shim's correctness).
 - [ ] Run on a physical iOS device (only validated on the Simulator).
 - [ ] Re-validate at the newer `260318099.0.1` stable (the same target
-      version as the Android side and `targets/rn-0.86`) — Mac-only
-      work, written up as a runbook in
-      [`docs/ios-handoff.md`](../../docs/ios-handoff.md).
+      version as the Android side and `targets/rn-0.86`) — Mac-only work,
+      not done here.

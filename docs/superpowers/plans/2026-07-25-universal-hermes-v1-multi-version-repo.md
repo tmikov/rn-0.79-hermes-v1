@@ -1,5 +1,14 @@
 # Universal Hermes V1 Multi-Version Repo — Implementation Plan
 
+> **Amendment (2026-07-25).** The easy-path target below is written as
+> `rn-0.85`, but execution pivoted it to **`rn-0.86`**: RN 0.85 pins a JSI
+> from just before `jsi::Runtime::isTypedArray` was added to the primary
+> `jsi::Runtime` interface, so it can't take a pure bump to `260318099.0.1`
+> (dlopen fails on the missing symbol); RN 0.86 can. Read every `rn-0.85` /
+> `sample85` below as `rn-0.86` / `sample86`. See the spec's matching
+> amendment and `docs/hermes-v1-versioning.md` for the JSI-ABI ceiling.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Reorganize this single-target repo into a universal guide plus per-version worked examples for running current Hermes V1 (`static_h`) on different React Native versions, with RN 0.79 (hard path) and RN 0.85 (easy path) both building and running on Android against Hermes V1 `260318099.0.1`.
@@ -567,7 +576,7 @@ The real gate is Task 4.4's build. If Step 1 shows no relevant diffs, note "CDP 
 
 ```bash
 cd targets/rn-0.79/sample79
-rm -f node_modules/react-native/.directtv-v1-patches-applied 2>/dev/null || true
+rm -f node_modules/react-native/.hermes-v1-patches-applied 2>/dev/null || true
 npm install
 ../scripts/apply-patches.sh
 ```

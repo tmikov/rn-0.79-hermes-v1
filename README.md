@@ -22,12 +22,34 @@ explanation, including the trap of confusing this with the similarly-named
 
 | RN version | Consumes | Effort |
 |---|---|---|
-| ≥ 0.84 | V1 by default (`com.facebook.hermes`) | Easy — bump the artifact version |
+| ≥ 0.84 | V1 by default (`com.facebook.hermes`) | Usually just a version bump — but ABI-gated; see the catch below |
 | 0.82–0.83 | V1 opt-in / source-build | Medium |
 | ≤ 0.81 | legacy inline `libhermes.so` (`com.facebook.react`) | Hard — vendor JSI, retarget CMake, swap Maven group |
 
+**The catch — "≥ 0.84 = easy" is not a given.** JSI is designed to grow
+*without* breaking its ABI: new capabilities are added as **optional
+interfaces** you query for at runtime, so they leave the core vtable
+untouched. The ABI breaks only when a **primary** interface — `jsi::Runtime`
+itself — is changed, e.g. a method added directly to it. Hermes does that
+rarely and deliberately, reserved for the primary interfaces where the API
+is judged worth the break. On Android the V1 Hermes AAR ships **no JSI** —
+the JSI symbols a Hermes build needs come from your RN's *own* prebuilt
+`libjsi.so`. So a newer-Hermes bump is trivial **unless a primary-interface
+change landed between the build your RN ships and your target**; short of
+that it's a one-line version bump (the `rn-0.86` example). If such a change
+did land — a `jsi::Runtime` method your RN's prebuilt JSI doesn't export —
+the app builds fine and then dies at `dlopen`, and the fix is re-vendoring
+JSI + rebuilding RN's native libs from source (the hard path's JSI step, on
+an otherwise-easy RN).
+
+**RN 0.84 and 0.85 are exactly this case** for the `260318099.0.1` target:
+both pin a JSI from just before `jsi::Runtime::isTypedArray` was added to
+the `Runtime` interface. **RN 0.86 isn't**, which is why it's the easy-path
+example here. Want 0.84 or 0.85 on this target? It's the JSI-rebuild path —
+open an issue and the instructions can be added.
+
 See [`docs/choosing-the-path.md`](docs/choosing-the-path.md) for the
-classification command and details on each row.
+classification command and the ABI check that tells the two cases apart.
 
 ## Worked examples
 
@@ -53,7 +75,7 @@ Both examples land on the same target build,
 │   ├── hermes-v1-versioning.md # canonical reference: what V1 is, how it's versioned
 │   ├── choosing-the-path.md    # decision tree for classifying a checkout
 │   ├── cdp-adapter.md          # design notes for the CDP (Chrome DevTools) shim
-│   └── ios-handoff.md          # iOS bring-up, run on a Mac (see below)
+│   └── ios-handoff.md          # iOS bring-up runbook — maintainer to-do (see CLAUDE.md)
 └── targets/
     ├── rn-0.79/                # hard path: full worked example + patches
     └── rn-0.86/                # easy path: full worked example
@@ -61,7 +83,6 @@ Both examples land on the same target build,
 
 ## iOS status
 
-Everything above is validated on Android; this guide's build/test loop runs
-on Linux, which can't build or run iOS. iOS bring-up for both worked
-examples is written up separately for a Mac in
-[`docs/ios-handoff.md`](docs/ios-handoff.md).
+Not yet — everything above is Android. iOS builds only on a Mac, and
+running agents on a Mac is less convenient than on the Linux server this was
+built on, so it hasn't been done yet. It will be.
