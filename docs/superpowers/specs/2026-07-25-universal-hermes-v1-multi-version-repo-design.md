@@ -176,3 +176,33 @@ moved files.
 - iOS builds/tests on this Linux box — deferred to `docs/ios-handoff.md` for the
   maintainer to run on a Mac (covers both rn-0.85 iOS bring-up and rn-0.79 iOS
   re-validation at `260318099.0.1`).
+
+---
+
+## Amendment (2026-07-25): easy-path base pivoted RN 0.85 → RN 0.86 (JSI-ABI ceiling)
+
+During execution the RN 0.85 easy-path target **built but crashed at runtime**:
+`dlopen: cannot locate symbol jsi::Runtime::isTypedArray(const jsi::Object&)`
+referenced by `libhermesvm.so`.
+
+Root cause (verified): the pure artifact bump is gated by the RN prebuilt's
+**JSI ABI**, because the V1 AAR ships no JSI — RN's own `libjsi.so` must export
+every JSI symbol the newer `libhermesvm.so` references.
+
+- `jsi::Runtime::isTypedArray` entered JSI at static_h **`250829098.0.11`**.
+- **RN 0.85 pins `250829098.0.10`** — the single last JSI patch *before* that
+  symbol — so its prebuilt `libjsi.so` cannot satisfy any newer stable. Reaching
+  `260318099.0.1` on RN 0.85 would require re-vendoring JSI and rebuilding RN's
+  native libs from source (the hard-path surgery).
+- **RN 0.86 pins `250829098.0.14`**; its bundled `jsi.h` is byte-identical to
+  `260318099.0.1`'s, so a pure one-line bump links and runs clean.
+
+**Decision (user-approved): move the easy-path proof point to RN 0.86.** Verified
+end-to-end: welcome screen reads `JS Engine: Hermes (260318099.0.1)`. The RN 0.85
+wall is retained as a documented caveat — it is the concrete illustration of the
+rule: *the easy pure-bump only reaches Hermes builds within your RN prebuilt's
+JSI-ABI window.* `targets/rn-0.85` is removed; `targets/rn-0.86` replaces it.
+
+This also refines the path-selection guidance: "RN ≥ 0.84 = easy" becomes
+"RN ≥ 0.84 = easy **iff** the RN prebuilt's JSI ABI already includes the symbols
+the target Hermes needs; otherwise it degrades to the hard path (source rebuild)."
