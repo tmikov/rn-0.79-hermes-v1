@@ -1,52 +1,52 @@
 # Running React Native on current Hermes V1
 
 This repo is a guide, with worked examples, for getting a React Native app
-onto a **current** build of Hermes V1 — regardless of which RN version
-you're starting from. How much work that takes depends entirely on how old
-your RN is: a recent RN already consumes V1 by default and it's mostly a
-version bump; an older RN predates V1 and needs real surgery. Both cases are
-built out here end to end, on Android.
+onto a current build of Hermes V1, whatever RN version you're starting from.
+How much work that takes depends entirely on how old your RN is. A recent RN
+already consumes V1 by default, so it's mostly a version bump; an older RN
+predates V1 and needs real surgery. Both cases are built out here end to end,
+on Android.
 
 ## The mental model
 
-Hermes V1 is the `facebook/hermes` **`static_h`** line — Hermes built and
-versioned independently of React Native, rather than compiled inline as
-part of the RN build. A given RN checkout records exactly which V1 build it
-pins in `packages/react-native/sdks/.hermesv1version`; if that file doesn't
-exist, the checkout predates V1 entirely. See
+Hermes V1 is the `facebook/hermes` `static_h` line: Hermes built and
+versioned independently of React Native, rather than compiled inline as part
+of the RN build. A given RN checkout records which V1 build it pins in
+`packages/react-native/sdks/.hermesv1version`; if that file doesn't exist,
+the checkout predates V1 entirely. See
 [`docs/hermes-v1-versioning.md`](docs/hermes-v1-versioning.md) for the full
-explanation, including the trap of confusing this with the similarly-named
+story, including the trap of confusing that file with the similarly named
 (but unrelated) legacy `.hermesversion` pin.
 
 ## Which path is yours?
 
 | RN version | Consumes | Effort |
 |---|---|---|
-| ≥ 0.84 | V1 by default (`com.facebook.hermes`) | Usually just a version bump — but ABI-gated; see the catch below |
+| ≥ 0.84 | V1 by default (`com.facebook.hermes`) | Usually just a version bump, but ABI-gated (see the catch below) |
 | 0.82–0.83 | V1 opt-in / source-build | Medium |
-| ≤ 0.81 | legacy inline `libhermes.so` (`com.facebook.react`) | Hard — vendor JSI, retarget CMake, swap Maven group |
+| ≤ 0.81 | legacy inline `libhermes.so` (`com.facebook.react`) | Hard: vendor JSI, retarget CMake, swap Maven group |
 
-**The catch — "≥ 0.84 = easy" is not a given.** JSI is designed to grow
-*without* breaking its ABI: new capabilities are added as **optional
-interfaces** you query for at runtime, so they leave the core vtable
-untouched. The ABI breaks only when a **primary** interface — `jsi::Runtime`
-itself — is changed, e.g. a method added directly to it. Hermes does that
-rarely and deliberately, reserved for the primary interfaces where the API
-is judged worth the break. On Android the V1 Hermes AAR ships **no JSI** —
-the JSI symbols a Hermes build needs come from your RN's *own* prebuilt
-`libjsi.so`. So a newer-Hermes bump is trivial **unless a primary-interface
-change landed between the build your RN ships and your target**; short of
-that it's a one-line version bump (the `rn-0.86` example). If such a change
-did land — a `jsi::Runtime` method your RN's prebuilt JSI doesn't export —
-the app builds fine and then dies at `dlopen`, and the fix is re-vendoring
-JSI + rebuilding RN's native libs from source (the hard path's JSI step, on
-an otherwise-easy RN).
+**The catch: "≥ 0.84 = easy" is not a given.** JSI is designed to grow
+without breaking its ABI. New capabilities show up as optional interfaces
+you query for at runtime, so they leave the core vtable alone. The ABI only
+breaks when a primary interface, `jsi::Runtime` itself, changes — say, a
+method added straight to it. Hermes does that rarely and on purpose, and only
+to the primary interfaces, where a cleaner API is worth the break.
 
-**RN 0.84 and 0.85 are exactly this case** for the `260318099.0.1` target:
-both pin a JSI from just before `jsi::Runtime::isTypedArray` was added to
-the `Runtime` interface. **RN 0.86 isn't**, which is why it's the easy-path
-example here. Want 0.84 or 0.85 on this target? It's the JSI-rebuild path —
-open an issue and the instructions can be added.
+Here's why that gates the bump. On Android the V1 Hermes AAR ships no JSI at
+all; the JSI symbols a Hermes build needs come from your RN's own prebuilt
+`libjsi.so`. So the bump stays trivial as long as no primary-interface change
+landed between the build your RN ships and the one you're moving to. When one
+did, you get the annoying kind of failure: the app builds fine, then dies at
+`dlopen` on the missing symbol. Fixing it means re-vendoring JSI and
+rebuilding RN's native libs from source, which is the hard path's JSI step on
+an otherwise-easy RN.
+
+RN 0.84 and 0.85 land on the wrong side of this for the `260318099.0.1`
+target: both pin a JSI from just before `jsi::Runtime::isTypedArray` was added
+to the `Runtime` interface. RN 0.86 doesn't, which is why it's the easy-path
+example here. If you need 0.84 or 0.85 on this target, that's the JSI-rebuild
+path; open an issue and the instructions can be added.
 
 See [`docs/choosing-the-path.md`](docs/choosing-the-path.md) for the
 classification command and the ABI check that tells the two cases apart.
@@ -56,14 +56,13 @@ classification command and the ABI check that tells the two cases apart.
 Both examples land on the same target build,
 `com.facebook.hermes:hermes-android:260318099.0.1`:
 
-- [`targets/rn-0.79/`](targets/rn-0.79/) — **hard path.** RN 0.79.5, which
-  predates V1, swapped onto it: JSI vendored from `static_h`, CMake
-  retargeted from `hermes-engine::libhermes` to `hermes-engine::hermesvm`,
-  Maven group swapped, plus a CDP adapter shim to keep Chrome DevTools
-  working.
-- [`targets/rn-0.86/`](targets/rn-0.86/) — **easy path.** RN 0.86, which
-  already consumes V1 out of the box, moved onto a newer `static_h` stable
-  than the one it ships with by default.
+- [`targets/rn-0.79/`](targets/rn-0.79/) — the hard path. RN 0.79.5 predates
+  V1, so it gets the full swap: JSI vendored from `static_h`, CMake retargeted
+  from `hermes-engine::libhermes` to `hermes-engine::hermesvm`, the Maven
+  group swapped, and a CDP adapter shim to keep Chrome DevTools working.
+- [`targets/rn-0.86/`](targets/rn-0.86/) — the easy path. RN 0.86 already
+  consumes V1 out of the box; here it's moved onto a newer `static_h` stable
+  than the one it ships with.
 
 ## Repo layout
 
@@ -83,6 +82,6 @@ Both examples land on the same target build,
 
 ## iOS status
 
-Not yet — everything above is Android. iOS builds only on a Mac, and
-running agents on a Mac is less convenient than on the Linux server this was
-built on, so it hasn't been done yet. It will be.
+Not yet. Everything above is Android. iOS builds only on a Mac, and running
+agents on a Mac is less convenient than on the Linux server this was built
+on, so it hasn't happened yet. It will.
