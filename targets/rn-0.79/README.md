@@ -414,6 +414,19 @@ building Hermes inline. See `CLAUDE.md` for the high-level rationale.
 The iOS analog is in §8 (CocoaPods rather than Gradle/CMake, but
 consumes the same V1 Maven artifacts).
 
+> **Version note (updated 2026-07-25).** The applied patches now pin the
+> Hermes V1 **artifact** to `260318099.0.1` (patches 02/03) — Android
+> Debug + Release re-validated on the emulator. This §6–§7 walkthrough was
+> originally written against `250829098.0.13`; wherever it shows
+> `hermes-android:250829098.0.13`, read `260318099.0.1`. Two things do
+> **not** change: (1) the **JSI vendoring** (patch 01 / §6a) still vendors
+> from tag `hermes-v250829098.0.13`, because `jsi.h` is byte-identical
+> between the two stables (no re-vendor needed); (2) for **release** (§7),
+> use `hermes-compiler@260318099.0.1`, which emits **HBC v99**
+> (byte 8 = `0x63`), not the v98 the older text mentions. iOS (§8–§9)
+> re-validation to `260318099.0.1` is Mac-only — see
+> [`docs/ios-handoff.md`](../../docs/ios-handoff.md).
+
 Quick recap of the deltas:
 
 - V1 lives at a new Maven coord: `com.facebook.hermes:hermes-android` (note
@@ -1193,6 +1206,11 @@ this time with no Metro running.
 
 Android:
 
+- [x] **Bumped to Hermes V1 `260318099.0.1`** (2026-07-25) — same target
+      as `targets/rn-0.86`. Debug + Release re-validated on the emulator;
+      release baked bundle is HBC **v99** (byte 8 = `0x63`, via
+      `hermes-compiler@260318099.0.1`). JSI unchanged (`jsi.h` identical to
+      `250829098.0.13`), so patch 01 is untouched. See the §6 version note.
 - [x] Project bootstrapped (RN 0.79.5)
 - [x] Debug APK builds (prebuilt AARs)
 - [x] App runs on emulator against Metro
