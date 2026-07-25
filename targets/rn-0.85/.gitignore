@@ -1,0 +1,3 @@
+# Pre-vendored Hermes V1 prebuilt tarballs, if any get fetched for this
+# target (mirrors the top-level rule for targets/rn-0.79). Not committed.
+vendor/
