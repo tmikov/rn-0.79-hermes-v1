@@ -1208,3 +1208,7 @@ iOS:
 - [x] Release app builds and runs on V1 with the JS bundle baked in as HBC v98 (no Metro). V1 iOS tarball ships its own host hermesc — no `hermes-compiler` npm dep needed unlike Android.
 - [x] Patch 04's CDP shim compiles into `libReact-hermes.a` on iOS too, but Chrome devtools end-to-end on iOS hasn't been smoke-tested yet (Android-side smoke covers the shim's correctness).
 - [ ] Run on a physical iOS device (only validated on the Simulator).
+- [ ] Re-validate at the newer `260318099.0.1` stable (the same target
+      version as the Android side and `targets/rn-0.86`) — Mac-only
+      work, written up as a runbook in
+      [`docs/ios-handoff.md`](../../docs/ios-handoff.md).
