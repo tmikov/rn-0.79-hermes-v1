@@ -17,7 +17,8 @@ There are six patches:
   "Regenerating patch 03" below.
 - `04-cdp-adapter.patch` is the CDP-adapter shim that restores the
   legacy `hermes/inspector/*` API on top of V1's `hermes/cdp/*` API
-  (see `CDP_ADAPTER_PLAN.md` at the repo root). It **layers on top
+  (see [`docs/cdp-adapter.md`](../../../docs/cdp-adapter.md) at the repo
+  root). It **layers on top
   of** patches 01 and 02 — its baseline for diffing is
   `(pristine RN) + patch 01 + patch 02 applied`, so it can be applied
   with `patch -p1` cleanly after 01 and 02 (and undoes some of patch

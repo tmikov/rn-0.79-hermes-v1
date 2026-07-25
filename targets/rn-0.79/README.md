@@ -429,7 +429,7 @@ Quick recap of the deltas:
   inspector, `setFatalHandler`). We stub or `#ifdef` the affected RN
   code; sampling profiler stays sacrificed, but Chrome devtools is
   restored via a small CDP adapter shim (§6i, design notes in
-  `CDP_ADAPTER_PLAN.md`).
+  [`docs/cdp-adapter.md`](../../docs/cdp-adapter.md)).
 
 You should have already done sections 1, 5a, and 5b above (the `includeBuild`
 block in `settings.gradle`, and the `sdkmanager` stub). Section 5c is **not**
@@ -476,8 +476,9 @@ are iOS-only and live in §8):
   source files under `ReactCommon/hermes/inspector/`
   (`RuntimeAdapter.{h,cpp}`, `chrome/CDPHandler.{h,cpp}`) and the
   CMake plumbing to build them as `hermes_inspector_shim` and bundle
-  the objects into `libhermestooling.so`. See `CDP_ADAPTER_PLAN.md`
-  at the repo root for design notes.
+  the objects into `libhermestooling.so`. See
+  [`docs/cdp-adapter.md`](../../docs/cdp-adapter.md) at the repo root
+  for design notes.
 
 Apply, then build:
 
@@ -808,7 +809,7 @@ What patch 04 does, at a glance:
   `MessageQueueThread::runOnQueue`.
 
 Design notes (open questions, MVP scope-cuts, risks) are in
-`CDP_ADAPTER_PLAN.md` at the repo root.
+[`docs/cdp-adapter.md`](../../docs/cdp-adapter.md) at the repo root.
 
 ### 6j. Build, install, run
 
@@ -1198,7 +1199,7 @@ Android:
 - [x] RN + Hermes built from source via `includeBuild`
 - [x] Hermes V1 swapped in (`com.facebook.hermes:hermes-android`); JS runs on V1
 - [x] Release APK builds and runs on V1 (V1 hermesc from `hermes-compiler` npm package). The patch-04 CDP shim is `$<$<CONFIG:Debug>:...>`-gated in CMake because the V1 Android AAR's `release` classifier strips the CDP symbols the shim references; in Release the shim isn't compiled or linked, and `libhermestooling.so` shrinks accordingly. CDP devtools is therefore Debug-only on Android.
-- [x] Restore Chrome devtools (CDP, against `hermes/cdp/*`) — done via the shim in `patches/04-cdp-adapter.patch`; design notes in `CDP_ADAPTER_PLAN.md`. End-to-end smoke: `Debugger.enable` over the inspector WebSocket round-trips through V1's `CDPAgent` and emits `Debugger.scriptParsed`. MVP scope-cuts: breakpoints lost across reloads, `waitForDebugger` ignored, console-API ingestion not yet routed.
+- [x] Restore Chrome devtools (CDP, against `hermes/cdp/*`) — done via the shim in `patches/04-cdp-adapter.patch`; design notes in [`docs/cdp-adapter.md`](../../docs/cdp-adapter.md). End-to-end smoke: `Debugger.enable` over the inspector WebSocket round-trips through V1's `CDPAgent` and emits `Debugger.scriptParsed`. MVP scope-cuts: breakpoints lost across reloads, `waitForDebugger` ignored, console-API ingestion not yet routed.
 - [ ] Sampling profiler (against V1's `hermes/Public/SamplingProfiler.h`) — fatal handler intentionally dropped (see §6g)
 
 iOS:
