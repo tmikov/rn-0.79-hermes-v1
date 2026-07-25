@@ -100,7 +100,9 @@ namespace facebook::hermes::inspector_modern::chrome {
 
 ### V1 API we delegate to
 
-From `hermes-android-250829098.0.13-debug.aar` prefab headers:
+From the V1 prefab headers (originally read from
+`hermes-android-250829098.0.13-debug.aar`; the `hermes/cdp/*` surface is
+unchanged at the current target `260318099.0.1`):
 
 ```cpp
 // hermes/cdp/CDPDebugAPI.h

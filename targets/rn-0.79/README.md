@@ -157,15 +157,17 @@ adb logcat -d ReactNativeJS:V '*:S' | tail
 
 The release build inlines a precompiled HBC bundle, so it needs the V1
 host bytecode compiler (`hermesc`). RN 0.79's bundled `hermesc` emits
-HBC v96; V1 requires v98. The matching host compiler is in the
-`hermes-compiler` npm package (versioned in lockstep with the
-`hermes-android` AAR).
+HBC v96; Hermes V1 `260318099.0.1` requires **v99** (byte 8 = `0x63`).
+The matching host compiler is in the `hermes-compiler` npm package
+(versioned in lockstep with the `hermes-android` AAR); `sample79`'s
+`package.json` already pins it, so a plain `npm install` pulls it — the
+explicit install below just makes the version obvious.
 
 After the debug path works:
 
 ```bash
 cd sample79
-npm install hermes-compiler@250829098.0.13 --save-dev
+npm install hermes-compiler@260318099.0.1 --save-dev
 
 cd android
 ./gradlew --no-daemon assembleRelease         # ~4 min cold
