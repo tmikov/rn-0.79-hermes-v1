@@ -1,7 +1,20 @@
 # Universal Hermes V1 multi-version repo — design
 
 **Date:** 2026-07-25
-**Status:** approved structure; scope open questions flagged below
+**Status:** approved — structure and scope decided (see Decisions)
+
+## Decisions (from spec review)
+
+1. **Android only this pass.** This work happens on a Linux box; iOS can't be
+   built or tested here. Do full **Android Debug + Release**. iOS is deferred to
+   a **handoff document** (`docs/ios-handoff.md`) that the maintainer runs on a
+   Mac.
+2. **Container name `targets/`** — confirmed.
+3. **Both targets use the same Hermes V1 version, `260318099.0.1`.** Different
+   targets on different Hermes versions would be confusing. This means the
+   existing 0.79 port is **re-validated at the newer static_h stable**, not left
+   on its current `250829098.0.13` — a real task, not a string swap (see
+   "Bumping the 0.79 port").
 
 ## Goal
 
@@ -71,7 +84,9 @@ whose difficulty depends on how that RN version consumes Hermes:
 │   │                             #   reusable doc, distilled from this investigation
 │   ├── choosing-the-path.md      # decision tree: identify what your RN ships,
 │   │                             #   how hard the swap is
-│   └── cdp-adapter.md            # moved from CDP_ADAPTER_PLAN.md (0.79-specific)
+│   ├── cdp-adapter.md            # moved from CDP_ADAPTER_PLAN.md (0.79-specific)
+│   └── ios-handoff.md            # what the maintainer runs on a Mac: iOS bring-up
+│                                 #   for rn-0.85 + rn-0.79 iOS re-validation at 260318099.0.1
 └── targets/
     ├── rn-0.79/              # HARD case — current content relocated intact
     │   ├── README.md         # the current ~46 KB diary, otherwise as-is
@@ -101,7 +116,11 @@ comparative guide).
    from this session's investigation, with the verification commands.
 4. **`docs/choosing-the-path.md`** — the decision tree.
 5. **`targets/rn-0.85/`** — the new worked example (see next section).
-6. **`CLAUDE.md`** update — reframe project goal as multi-version.
+6. **Bump `targets/rn-0.79/` to `260318099.0.1`** — re-validate the existing
+   port at the newer static_h stable (see "Bumping the 0.79 port").
+7. **`docs/ios-handoff.md`** — Mac-side instructions for the iOS work this pass
+   defers.
+8. **`CLAUDE.md`** update — reframe project goal as multi-version.
 
 ## `targets/rn-0.85` — scope and acceptance
 
@@ -117,13 +136,32 @@ comparative guide).
     `260318099.0.1`) to emit the right HBC version?
   - Does anything in RN 0.85's Hermes integration hard-code the `250829098`
     version or assume its ABI?
-- **Proposed effort scope for this pass (CONFIRM):** Android **Debug + Release**
-  building and running on `260318099.0.1`. iOS is a **parity stretch**
-  (documented; mirrors the 0.79 iOS approach) rather than a hard requirement
-  for the first cut.
+- **Effort scope this pass:** Android **Debug + Release** building and running
+  on `260318099.0.1`. iOS is deferred to `docs/ios-handoff.md`.
 - **Acceptance:** the app launches on an emulator; `libhermesvm.so` is present
   (no `libhermes.so`); the engine reports the V1 version; the release APK runs
   with the JS baked in as HBC and no Metro.
+
+## Bumping the 0.79 port to `260318099.0.1`
+
+The existing 0.79 port targets `250829098.0.13`. Moving it to `260318099.0.1`
+(one static_h stable branch newer, 2026-03-18 vs 2025-08-29) is a re-validation,
+not a rename:
+
+- Update the version string wherever the patches hard-code it (the Gradle
+  substitution in patch 02, the iOS vendor script/Podfile in patches 05/06,
+  the release hermesc `hermes-compiler` version).
+- Re-vendor `static_h:API/jsi/jsi/*` (patch 01) **if** the newer stable's JSI
+  drifted from what patch 01 currently ships. Diff before assuming.
+- Re-check the CDP shim (patch 04) against `260318099`'s `hermes/cdp/*` — the
+  same drift that motivated the shim could have shifted again.
+- Confirm the V1 hermesc at `260318099.0.1` still emits the HBC version RN 0.79
+  loads.
+- **Android is validated here; iOS re-validation goes to the handoff doc.**
+
+If the bump turns out to be more than mechanical, that discovery is itself a
+useful data point for the guide (it shows what "newer static_h stable" can cost
+even on the hard path).
 
 ## History preservation
 
@@ -135,15 +173,6 @@ moved files.
 
 - Building/testing RN versions other than 0.79 and 0.85.
 - Building the 0.82–0.83 opt-in path (documented only).
-- Upgrading the existing 0.79 port's engine from `250829098.0.13` to
-  `260318099.0.1` (possible later; not part of this effort).
-
-## Open questions for spec review
-
-1. **rn-0.85 platform/build scope** — Android Debug+Release first with iOS as a
-   stretch (proposed), or full Android+iOS / Debug+Release parity with 0.79 in
-   this pass?
-2. **Container name** — `targets/` (proposed) vs `versions/` / `examples/`.
-   (Structure approved with `targets/`; noting in case of second thoughts.)
-3. **Should the 0.79 port also be bumped** to `260318099.0.1` for consistency,
-   or left on its validated `250829098.0.13`?
+- iOS builds/tests on this Linux box — deferred to `docs/ios-handoff.md` for the
+  maintainer to run on a Mac (covers both rn-0.85 iOS bring-up and rn-0.79 iOS
+  re-validation at `260318099.0.1`).
