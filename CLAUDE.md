@@ -2,11 +2,41 @@
 
 ## Goal
 
-Get RN 0.79.5's Android app running on **Hermes V1** instead of the Hermes
-that RN 0.79 ships with. We're using a stock `sample79/` app as the host
-(see README for setup and build instructions).
+This repo teaches how to get a React Native app running on **current
+Hermes V1** (the `facebook/hermes` `static_h` line), regardless of which RN
+version you start from. How much surgery that takes depends on how old the
+RN checkout is — that's the whole reason this is a guide and not a single
+patch. Two worked examples, both landing on the same target build
+`com.facebook.hermes:hermes-android:260318099.0.1`:
 
-## Why this is non-trivial
+- **`targets/rn-0.79/`** — hard path. RN 0.79.5 predates V1 entirely (no
+  `.hermesv1version` file), so it needs full surgery: vendored JSI,
+  retargeted CMake, swapped Maven group, a CDP adapter shim. This is the
+  original scope of this repo and the most-developed example; the rest of
+  this file (below "Where things live") documents that hard path in detail.
+- **`targets/rn-0.85/`** — easy path. RN 0.85 already consumes V1 by
+  default; getting onto a newer `static_h` stable is close to just an
+  artifact-version bump.
+
+RN's own pin for which V1 build it consumes lives at
+`packages/react-native/sdks/.hermesv1version` — see
+`docs/hermes-v1-versioning.md` for the full versioning story, including the
+trap of confusing that file with the unrelated legacy `.hermesversion` pin.
+
+## Where things live
+
+- `targets/rn-0.79/`, `targets/rn-0.85/` — the worked examples, each with
+  its own README covering setup and build instructions for that target.
+- `docs/hermes-v1-versioning.md` — canonical reference for what Hermes V1
+  is and how it's versioned.
+- `docs/choosing-the-path.md` — decision tree for classifying any RN
+  checkout into easy/medium/hard.
+- `docs/cdp-adapter.md` — design notes for the CDP (Chrome DevTools) shim
+  used by the hard path.
+- Root `README.md` — short landing page; this file is deeper project
+  context, scoped mostly to the hard path (`rn-0.79`) below.
+
+## Hard path (`targets/rn-0.79`): why this is non-trivial
 
 RN 0.79 was built before Hermes split off as a standalone artifact, so its
 Gradle/CMake setup deeply integrates the Hermes build:
@@ -18,11 +48,11 @@ Gradle/CMake setup deeply integrates the Hermes build:
 - `libreactnative.so` is compiled against those exact JSI headers.
 
 Hermes V1 changed both: it builds independently of RN, and **the library
-itself is renamed**. Newer RN versions adopted this cleaner model; RN 0.79
-did not. The integration shims we'll need to write live entirely on the RN
-side — the Hermes side is just a library + headers.
+itself is renamed**. Newer RN versions (like `rn-0.85`) adopted this cleaner
+model; RN 0.79 did not. The integration shims we need to write live
+entirely on the RN side — the Hermes side is just a library + headers.
 
-## Strategy
+## Strategy (hard path)
 
 Start with the **Hermes V1 prebuilts** rather than building Hermes from
 source. The hard work (rewiring RN 0.79's build to consume a renamed library
@@ -30,9 +60,9 @@ source. The hard work (rewiring RN 0.79's build to consume a renamed library
 just adds a multi-ABI cross-compile per iteration. Switch to a source build
 only if we need to patch Hermes.
 
-Note: hermesc isn't needed yet — debug builds get JS from Metro at runtime.
-We'll need it (or the prebuilt host hermesc) before we can build a release
-APK.
+Note: hermesc isn't needed for debug builds — they get JS from Metro at
+runtime. It's needed (the prebuilt host hermesc, or the `hermes-compiler`
+npm package) before building a release APK.
 
 ## Known risks
 
@@ -48,14 +78,19 @@ APK.
   old JSI headers — we have to vendor in the JSI that Hermes V1 expects and
   rebuild `libreactnative.so` against it. This is the main RN-side surgery.
 
-## Hermes V1 facts (gathered 2026-05-07)
+## Hermes V1 facts (gathered 2026-05-07; version pin updated 2026-07-25)
 
-- Maven: `com.facebook.hermes:hermes-android:250829098.0.13` (note the
-  group is `com.facebook.hermes`, not `com.facebook.react`).
+- Maven: `com.facebook.hermes:hermes-android:260318099.0.1` — the target
+  version for both worked examples in this repo (note the group is
+  `com.facebook.hermes`, not `com.facebook.react`).
   - Old Hermes lives at `com.facebook.react:hermes-android:<RN-version>`
     and is versioned alongside RN.
   - V1 versions follow `<YYMMDDxxx>.0.N`. Classifiers: `debug`,
     `debugOptimized`, `release`.
+  - RN pins the V1 build it consumes in
+    `packages/react-native/sdks/.hermesv1version`; absence of that file
+    means the checkout predates V1 (hard path). See
+    `docs/hermes-v1-versioning.md` for the full versioning story.
 - Source: `facebook/hermes` branch **`static_h`**.
 - **Library renamed** `libhermes.so` → `libhermesvm.so`.
 - **Prefab package name unchanged** (`hermes-engine`), so
@@ -71,7 +106,7 @@ APK.
   provide JSI matching what V1 was built against.
 - Hermes V1 still depends on `com.facebook.fbjni:fbjni:0.7.0`.
 
-## RN-side surgery checklist (rough)
+## RN-side surgery checklist (hard path — rn-0.79)
 
 1. Replace `node_modules/react-native/ReactCommon/jsi/jsi/*` with the
    `static_h:API/jsi/jsi/*` versions (drop-in: same files + new
@@ -87,6 +122,6 @@ APK.
    Hermes (`hermes-2025-06-04-RNv0.79.3-7f9a871e...`) and `static_h`.
 5. hermesc: not needed for debug/Metro. For release, install the
    `hermes-compiler` npm package (versioned in lockstep with
-   `hermes-android`, e.g. `250829098.0.13`) and point RN's gradle
+   `hermes-android`, e.g. `260318099.0.1`) and point RN's gradle
    plugin at it via `react.hermesCommand` in `app/build.gradle`. RN
    0.79's bundled hermesc emits HBC v96; V1 needs v98.
