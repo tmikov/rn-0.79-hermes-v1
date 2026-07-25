@@ -130,8 +130,61 @@ How React Native's relationship with V1 evolved, release by release:
 | ≤ 0.81 | No `.hermesv1version` file at all — the file doesn't exist. RN builds the legacy inline `libhermes.so` from `com.facebook.react:hermes-android`. |
 | 0.82 | V1 opt-in, source build only. `.hermesv1version` exists but pins a raw `static_h` commit SHA rather than a released version tag — there's no prebuilt artifact yet, so consuming it means building Hermes from source. |
 | 0.83 | The standalone `com.facebook.hermes` group becomes the default *packaging*, and `.hermesv1version` pins a real, released `static_h` version (`hermes-v250829098.0.4`) instead of a raw commit SHA — but V1 is not yet the default *engine*: consuming it as the running JS engine is still opt-in, not the out-of-the-box prebuilt path. |
-| 0.84 | First release where V1 is the default **engine** consumed via prebuilts as the primary path — no source build required. This is the "easy path" this repo's `targets/rn-0.85` worked example exploits. |
+| 0.84 | First release where V1 is the default **engine** consumed via prebuilts as the primary path — no source build required. This is the "easy path" this repo's `targets/rn-0.86` worked example exploits. |
 | 0.84 – 0.86 | All three releases stay on the `250829098` stable branch, only bumping the patch component (`.0.9` → `.0.10` → `.0.14`). None has moved to `260318099` yet. |
+
+## The JSI-ABI ceiling: why a pure bump isn't always safe
+
+"RN ≥ 0.84 consumes V1 by default" makes bumping to a newer `static_h`
+stable sound like a version-number edit and nothing else. Usually it is
+— but there's a ceiling, and it's worth understanding exactly what it's
+made of before you rely on the bump being that simple.
+
+The V1 Hermes AAR **ships no JSI at all** — it ships only Hermes headers
+(`prefab/.../include/hermes/`, `hermes_abi/`, `hermes_sandbox/`). On
+Android, the JSI that `libhermesvm.so` was compiled against, and whose
+symbols it expects to find at `dlopen` time, comes entirely from
+**RN's own prebuilt `libjsi.so`** (built into `libreactnative.so`). A
+pure artifact bump only stays a pure artifact bump if that prebuilt
+already exports every JSI symbol the newer `libhermesvm.so` references.
+If it doesn't, the bump still *builds* — the AAR swap is a Gradle/Maven
+concern, not a compile-time one — and then fails at load time instead.
+
+`jsi::Runtime::isTypedArray(const jsi::Object&)` is the concrete
+boundary case this repo hit. It entered JSI at static_h
+**`250829098.0.11`**. Cross-reference against the `.hermesv1version`
+pins in the adoption table above:
+
+- **RN 0.85** (`0.85.3`) pins **`250829098.0.10`** — the single stable
+  patch *immediately before* `isTypedArray` was added. Its prebuilt
+  `libjsi.so` doesn't define the symbol. Bumping RN 0.85 to
+  `250829098.0.11` or later (including this repo's target,
+  `260318099.0.1`) builds cleanly and then crashes on startup:
+  `dlopen: cannot locate symbol jsi::Runtime::isTypedArray(const
+  jsi::Object&) referenced by libhermesvm.so`. Reaching current V1 on
+  RN 0.85 for real requires re-vendoring JSI and rebuilding RN's native
+  libs from source — the hard path's JSI step, grafted onto a checkout
+  that otherwise looked easy.
+- **RN 0.86** (`0.86.0`) pins **`250829098.0.14`**, three patches past
+  `isTypedArray`'s introduction. Its prebuilt JSI already has the
+  symbol, so the same bump to `260318099.0.1` links and runs clean.
+  This is the entire reason this repo's easy-path worked example
+  (`targets/rn-0.86`) targets 0.86 rather than 0.85 — it was originally
+  built on 0.85 and moved after hitting exactly this wall.
+
+**The check, before you bump any RN checkout:** diff the RN checkout's
+bundled `node_modules/react-native/ReactCommon/jsi/jsi/jsi.h` against
+the target Hermes tag's `API/jsi/jsi/jsi.h` (`facebook/hermes`, tag
+`hermes-v<target-version>`). Identical (or the RN copy is a strict
+superset) → the bump is safe. The target tag added `jsi::Runtime`
+methods the RN copy lacks → the bump will link but can crash at load
+time; treat it as the hard path's JSI-vendoring problem instead. For RN
+0.86 → `260318099.0.1` specifically, that diff comes back empty:
+`ReactCommon/jsi/jsi/jsi.h` in RN 0.86.0 is byte-identical to
+`API/jsi/jsi/jsi.h` at `hermes-v260318099.0.1`.
+
+See [`docs/choosing-the-path.md`](choosing-the-path.md) for how this
+folds into the easy/medium/hard classification.
 
 ## Appendix: verification commands
 
@@ -192,6 +245,26 @@ gh api "repos/facebook/react-native/contents/packages/react-native/sdks/.hermesv
 gh api "repos/facebook/react-native/contents/packages/react-native/sdks/.hermesversion?ref=v0.85.3" \
   --jq '.content' | base64 -d
 # => hermes-v0.16.0
+```
+
+Commands backing the "JSI-ABI ceiling" section above:
+
+```bash
+# isTypedArray is absent at 250829098.0.10 and present at 250829098.0.11 —
+# pins the exact patch where the symbol entered JSI.
+gh api "repos/facebook/hermes/contents/API/jsi/jsi/jsi.h?ref=hermes-v250829098.0.10" \
+  --jq '.content' | base64 -d | grep -c isTypedArray
+# => 0
+gh api "repos/facebook/hermes/contents/API/jsi/jsi/jsi.h?ref=hermes-v250829098.0.11" \
+  --jq '.content' | base64 -d | grep -c isTypedArray
+# => 1 (or more, declaration + doc comment)
+
+# The pre-bump safety check: diff an RN release's bundled jsi.h against
+# the target Hermes tag's jsi.h. Empty diff => pure bump is safe.
+diff \
+  <(gh api "repos/facebook/react-native/contents/packages/react-native/ReactCommon/jsi/jsi/jsi.h?ref=v0.86.0" --jq '.content' | base64 -d) \
+  <(gh api "repos/facebook/hermes/contents/API/jsi/jsi/jsi.h?ref=hermes-v260318099.0.1" --jq '.content' | base64 -d)
+# => (empty — byte-identical)
 ```
 
 If a re-run produces different numbers than the ones recorded in this

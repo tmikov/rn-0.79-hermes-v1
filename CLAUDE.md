@@ -14,7 +14,7 @@ patch. Two worked examples, both landing on the same target build
   retargeted CMake, swapped Maven group, a CDP adapter shim. This is the
   original scope of this repo and the most-developed example; the rest of
   this file (below "Where things live") documents that hard path in detail.
-- **`targets/rn-0.85/`** — easy path. RN 0.85 already consumes V1 by
+- **`targets/rn-0.86/`** — easy path. RN 0.86 already consumes V1 by
   default; getting onto a newer `static_h` stable is close to just an
   artifact-version bump.
 
@@ -25,7 +25,7 @@ trap of confusing that file with the unrelated legacy `.hermesversion` pin.
 
 ## Where things live
 
-- `targets/rn-0.79/`, `targets/rn-0.85/` — the worked examples, each with
+- `targets/rn-0.79/`, `targets/rn-0.86/` — the worked examples, each with
   its own README covering setup and build instructions for that target.
 - `docs/hermes-v1-versioning.md` — canonical reference for what Hermes V1
   is and how it's versioned.
@@ -48,7 +48,7 @@ Gradle/CMake setup deeply integrates the Hermes build:
 - `libreactnative.so` is compiled against those exact JSI headers.
 
 Hermes V1 changed both: it builds independently of RN, and **the library
-itself is renamed**. Newer RN versions (like `rn-0.85`) adopted this cleaner
+itself is renamed**. Newer RN versions (like `rn-0.86`) adopted this cleaner
 model; RN 0.79 did not. The integration shims we need to write live
 entirely on the RN side — the Hermes side is just a library + headers.
 

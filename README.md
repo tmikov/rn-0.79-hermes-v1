@@ -39,7 +39,7 @@ Both examples land on the same target build,
   retargeted from `hermes-engine::libhermes` to `hermes-engine::hermesvm`,
   Maven group swapped, plus a CDP adapter shim to keep Chrome DevTools
   working.
-- [`targets/rn-0.85/`](targets/rn-0.85/) — **easy path.** RN 0.85, which
+- [`targets/rn-0.86/`](targets/rn-0.86/) — **easy path.** RN 0.86, which
   already consumes V1 out of the box, moved onto a newer `static_h` stable
   than the one it ships with by default.
 
@@ -56,7 +56,7 @@ Both examples land on the same target build,
 │   └── ios-handoff.md          # iOS bring-up, run on a Mac (see below)
 └── targets/
     ├── rn-0.79/                # hard path: full worked example + patches
-    └── rn-0.85/                # easy path: full worked example
+    └── rn-0.86/                # easy path: full worked example
 ```
 
 ## iOS status
