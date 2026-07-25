@@ -22,6 +22,6 @@ index 2ca68f6..2d96b1c 100644
 +includeBuild('../node_modules/react-native') {
 +    dependencySubstitution {
 +        substitute(module("com.facebook.react:react-android")).using(project(":packages:react-native:ReactAndroid"))
-+        substitute(module("com.facebook.react:hermes-android")).using(module("com.facebook.hermes:hermes-android:250829098.0.13"))
++        substitute(module("com.facebook.react:hermes-android")).using(module("com.facebook.hermes:hermes-android:260318099.0.1"))
 +    }
 +}

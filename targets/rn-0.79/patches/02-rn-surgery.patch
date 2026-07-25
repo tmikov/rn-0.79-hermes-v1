@@ -35,7 +35,7 @@
    // It's up to the consumer to decide if hermes/jsc should be included or not.
    // Therefore hermes-engine and jsc are compileOnly dependencies.
 -  compileOnly(project(":packages:react-native:ReactAndroid:hermes-engine"))
-+  compileOnly("com.facebook.hermes:hermes-android:250829098.0.13")
++  compileOnly("com.facebook.hermes:hermes-android:260318099.0.1")
    compileOnly(libs.jsc.android)
  
    testImplementation(libs.junit)

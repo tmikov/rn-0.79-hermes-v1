@@ -44,8 +44,8 @@ There are six patches:
 JSI is **source-stable, not ABI-stable**. The vendored JSI files must
 match the snapshot the `libhermesvm.so` in the V1 AAR was built against.
 That snapshot is captured by the git tag `hermes-v<aar-version>` (e.g.
-the AAR `com.facebook.hermes:hermes-android:250829098.0.13` corresponds
-to tag `hermes-v250829098.0.13`).
+the AAR `com.facebook.hermes:hermes-android:260318099.0.1` corresponds
+to tag `hermes-v260318099.0.1`).
 
 Do **not** vendor from `static_h` HEAD — even an unrelated commit between
 the AAR's snapshot and HEAD that changes inline JSI functions, vtable
@@ -54,7 +54,7 @@ layouts, or member offsets would silently produce UB at runtime.
 Re-vendor:
 
 ```bash
-TAG=hermes-v250829098.0.13            # match the V1 AAR Maven version
+TAG=hermes-v260318099.0.1            # match the V1 AAR Maven version
 JSI_DST=/path/to/sample79/node_modules/react-native/ReactCommon/jsi/jsi
 files="CMakeLists.txt JSIDynamic.cpp JSIDynamic.h decorator.h \
        hermes-interfaces.h instrumentation.h jsi-inl.h jsi.cpp jsi.h \
